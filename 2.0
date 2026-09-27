@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>3D Doors Horror</title>
+  <style>
+    :root {
+      --bg1: #0b0d17;
+      --bg2: #111827;
+      --panel: rgba(15, 18, 28, 0.9);
+      --accent: #7ef7ff;
+      --accent2: #8ea8ff;
+      --danger: #ff5d5d;
+      --gold: #ffc857;
+      --text: #eef2ff;
+      --muted: #a5afc6;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background:
+        radial-gradient(circle at top, rgba(76, 90, 130, 0.4), transparent 35%),
+        linear-gradient(180deg, #0f1220 0%, #0a0c12 100%);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 10px;
+    }
+
+    #gameWrap {
+      position: relative;
+      width: min(96vw, 960px);
+      aspect-ratio: 16 / 9;
+      border-radius: 20px;
+      overflow: hidden;
+      background: #0d1019;
+      border: 2px solid rgba(255,255,255,0.12);
+      box-shadow:
+        0 30px 70px rgba(0,0,0,0.65),
+        inset 0 0 30px rgba(126,247,255,0.08);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(180deg, #111827 0%, #090d14 100%);
+      touch-action: none;
+    }
+
+    #hud {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      z-index: 4;
+      pointer-events: none;
+    }
+
+    .pill {
+      background: rgba(0,0,0,0.28);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      backdrop-filter: blur(3px);
+      font-size: clamp(12px, 1.5vw, 15px);
+    }
+
+    .pill .label {
+      color: var(--muted);
+      margin-right: 6px;
+      font-weight: 400;
+    }
+
+    #message {
+      position: absolute;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      min-width: 250px;
+      max-width: 78%;
+      text-align: center;
+      padding: 10px 18px;
+      border-radius: 12px;
+      background: rgba(10, 14, 21, 0.82);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #f4f6ff;
+      font-weight: bold;
+      letter-spacing: 0.04em;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+      z-index: 4;
+      font-size: clamp(12px, 1.6vw, 15px);
+    }
+
+    #message.show {
+      opacity: 1;
+    }
+
+    #titleScreen, #gameOver {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(5, 8, 13, 0.72);
+      backdrop-filter: blur(4px);
+      z-index: 10;
+    }
+
+    #gameOver { display: none; }
+    #gameOver.show { display: flex; }
+
+    .panel {
+      width: min(82%, 520px);
+      padding: clamp(18px, 2.8vw, 28px);
+      border-radius: 18px;
+      background: rgba(20, 24, 32, 0.96);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 18px 42px rgba(0,0,0,0.42);
+    }
+
+    h1 {
+      margin: 6px 0 12px;
+      letter-spacing: 0.08em;
+      font-size: clamp(28px, 4vw, 42px);
+      color: var(--accent);
+      text-shadow: 0 0 20px rgba(126, 247, 255, 0.45);
+    }
+
+    .small {
+      color: var(--muted);
+      margin: 0 0 20px;
+      line-height: 1.6;
+      font-size: clamp(13px, 1.8vw, 15px);
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      padding: 14px 22px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #05151b;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(126,247,255,0.2);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      touch-action: manipulation;
+    }
+
+    button:hover, button:active {
+      transform: translateY(-1px) scale(0.99);
+    }
+
+    .controls {
+      margin-top: 18px;
+      display: grid;
+      gap: 8px;
+      font-size: clamp(12px, 1.5vw, 14px);
+      color: #dfe7ff;
+    }
+
+    .controls strong {
+      color: var(--gold);
+    }
+
+    #touchControls {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 12px;
+      display: none;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 0 16px;
+      z-index: 6;
+      pointer-events: none;
+    }
+
+    .touchCluster {
+      display: grid;
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    .touchRow {
+      display: flex;
+      gap: 8px;
+    }
+
+    .touchBtn {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: rgba(21, 28, 38, 0.78);
+      border: 1px solid rgba(255,255,255,0.16);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      font-weight: 800;
+      user-select: none;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.28);
+      padding: 0;
+      letter-spacing: 0;
+      text-transform: none;
+      backdrop-filter: blur(3px);
+    }
+
+    .touchBtn:active, .touchBtn.active {
+      background: rgba(126,247,255,0.18);
+      border-color: rgba(126,247,255,0.42);
+      transform: scale(0.97);
+    }
+
+    .doorBtn {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      font-size: 18px;
+      background: rgba(35, 45, 60, 0.86);
+    }
+
+    @media (max-width: 700px) {
+      body { padding: 6px; }
+      #touchControls { display: flex; }
+    }
+  </style>
+</head>
+<body>
+  <div id="gameWrap">
+    <canvas id="gameCanvas" width="960" height="540"></canvas>
+
+    <div id="hud">
+      <div class="pill"><span class="label">Health</span><span id="healthValue">100</span></div>
+      <div class="pill"><span class="label">Keys</span><span id="keysValue">0</span></div>
+      <div class="pill"><span class="label">Room</span><span id="roomValue">1</span></div>
+    </div>
+
+    <div id="message"></div>
+
+    <div id="touchControls">
+      <div class="touchCluster">
+        <div class="touchRow">
+          <button class="touchBtn" data-move="w" aria-label="Move up">▲</button>
+        </div>
+        <div class="touchRow">
+          <button class="touchBtn" data-move="a" aria-label="Move left">◀</button>
+          <button class="touchBtn" data-move="s" aria-label="Move down">▼</button>
+          <button class="touchBtn" data-move="d" aria-label="Move right">▶</button>
+        </div>
+      </div>
+
+      <div class="touchCluster">
+        <div class="touchRow">
+          <button class="touchBtn doorBtn" data-door="1" aria-label="Door left">1</button>
+          <button class="touchBtn doorBtn" data-door="2" aria-label="Door right">2</button>
+        </div>
+        <div class="touchRow">
+          <button class="touchBtn doorBtn" data-door="3" aria-label="Door up">3</button>
+          <button class="touchBtn doorBtn" data-door="4" aria-label="Door down">4</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="titleScreen">
+      <div class="panel">
+        <h1>DOORS</h1>
+        <p class="small">
+          Survive the maze. Grab keys to unlock doors. Avoid the shadow monster.
+          Reach deeper rooms to stay alive.
+        </p>
+        <button id="startBtn">Start Game</button>
+        <div class="controls">
+          <div><strong>Move:</strong> WASD / Arrow Keys</div>
+          <div><strong>Doors:</strong> 1 = Left, 2 = Right, 3 = Up, 4 = Down</div>
+          <div><strong>Pickup:</strong> Walk over key or locker item</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="gameOver">
+      <div class="panel">
+        <h1 style="font-size:34px;">You Died</h1>
+        <p id="finalText" class="small"></p>
+        <button id="restartBtn">Restart</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const ui = {
+      health: document.getElementById("healthValue"),
+      keys: document.getElementById("keysValue"),
+      room: document.getElementById("roomValue"),
+      message: document.getElementById("message"),
+      titleScreen: document.getElementById("titleScreen"),
+      gameOver: document.getElementById("gameOver"),
+      finalText: document.getElementById("finalText"),
+    };
+
+    const keysPressed = {};
+    const directions = ["left","right","up","down"];
+
+    const game = {
+      started: false,
+      over: false,
+      roomIndex: 1,
+      health: 100,
+      keys: 0,
+      room: null,
+      player: null,
+      monster: null,
+      monsterTimer: 0,
+      messageTimer: 0,
+      time: 0,
+    };
+
+    function setMessage(text, duration = 2.2) {
+      ui.message.textContent = text;
+      ui.message.classList.add("show");
+      game.messageTimer = duration;
+    }
+
+    function hideMessage() {
+      ui.message.classList.remove("show");
+    }
+
+    function resetGame() {
+      game.started = true;
+      game.over = false;
+      game.roomIndex = 1;
+      game.health = 100;
+      game.keys = 0;
+      game.time = 0;
+
+      game.player = {
+        x: canvas.width / 2,
+        y: canvas.height - 80,
+        r: 14,
+        speed: 170,
+      };
+
+      game.monster = {
+        x: 120,
+        y: 120,
+        r: 18,
+        active: false,
+        speed: 85,
+        lastHit: 0,
+      };
+
+      game.room = createRoom(game.roomIndex);
+      updateHud();
+      ui.titleScreen.style.display = "none";
+      ui.gameOver.classList.remove("show");
+      hideMessage();
+      setMessage("Find the key and survive.", 2.5);
+    }
+
+    function updateHud() {
+      ui.health.textContent = Math.max(0, Math.round(game.health));
+      ui.keys.textContent = String(game.keys);
+      ui.room.textContent = String(game.roomIndex);
+    }
+
+    function createRoom(level) {
+      const room = {
+        level,
+        doors: { left: false, right: false, up: false, down: false },
+        locked: { left: false, right: false, up: false, down: false },
+        key: false,
+        closet: false,
+        hazard: false,
+        keyPos: { x: 0, y: 0 },
+        closetPos: { x: 0, y: 0 },
+      };
+
+      const totalDoors = 1 + Math.floor(Math.random() * 3);
+      const dirs = [...directions];
+
+      for (let i = 0; i < totalDoors; i++) {
+        const idx = Math.floor(Math.random() * dirs.length);
+        const dir = dirs.splice(idx, 1)[0];
+        room.doors[dir] = true;
+      }
+
+      if (!Object.values(room.doors).includes(true)) {
+        room.doors.right = true;
+      }
+
+      for (const dir of directions) {
+        if (room.doors[dir] && Math.random() < 0.35) {
+          room.locked[dir] = true;
+        }
+      }
+
+      if ((level > 1 && Math.random() < 0.78) || (level === 1 && Math.random() < 0.35)) {
+        room.key = true;
+        room.keyPos = {
+          x: 120 + Math.random() * (canvas.width - 240),
+          y: 110 + Math.random() * (canvas.height - 220),
+        };
+      }
+
+      room.closet = Math.random() < 0.38;
+      if (room.closet) {
+        room.closetPos = {
+          x: 160 + Math.random() * (canvas.width - 320),
+          y: 120 + Math.random() * (canvas.height - 220),
+        };
+      }
+
+      room.hazard = level >= 3 && Math.random() < 0.5;
+      return room;
+    }
+
+    function getDoorPositions() {
+      return {
+        left: { x: 25, y: canvas.height / 2 - 60, w: 28, h: 118 },
+        right: { x: canvas.width - 53, y: canvas.height / 2 - 60, w: 28, h: 118 },
+        up: { x: canvas.width / 2 - 56, y: 25, w: 112, h: 28 },
+        down: { x: canvas.width / 2 - 56, y: canvas.height - 53, w: 112, h: 28 },
+      };
+    }
+
+    function doorKeyFor(dir) {
+      const map = { left: "1", right: "2", up: "3", down: "4" };
+      return map[dir];
+    }
+
+    function useDoor(dir) {
+      if (!game.started || game.over) return;
+
+      const room = game.room;
+      if (!room.doors[dir]) {
+        setMessage("There is no door there.", 1.4);
+        return;
+      }
+
+      if (room.locked[dir]) {
+        if (game.keys > 0) {
+          game.keys--;
+          room.locked[dir] = false;
+          setMessage("Door unlocked!", 1.5);
+        } else {
+          setMessage("Door is locked! Need a key.", 1.6);
+          return;
+        }
+      }
+
+      game.roomIndex += 1;
+      game.room = createRoom(game.roomIndex);
+
+      if (game.roomIndex >= 3) {
+        game.monster.active = true;
+        game.monster.speed = 95 + game.roomIndex * 10;
+      }
+
+      if (game.roomIndex > 1) {
+        setMessage("New room...", 1.5);
+      }
+
+      updateHud();
+    }
+
+    function pickupKeyIfNear() {
+      const room = game.room;
+      if (!room.key) return;
+
+      const dx = game.player.x - room.keyPos.x;
+      const dy = game.player.y - room.keyPos.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist < 22) {
+        room.key = false;
+        game.keys += 1;
+        setMessage("Key found!", 1.5);
+        updateHud();
+      }
+    }
+
+    function useClosetIfNear() {
+      const room = game.room;
+      if (!room.closet) return;
+
+      const dx = game.player.x - room.closetPos.x;
+      const dy = game.player.y - room.closetPos.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist < 30) {
+        setMessage("You hide in the closet. Monster loses track.", 1.8);
+        game.monster.active = false;
+        game.monster.x = -1000;
+        game.monster.y = -1000;
+        game.monsterTimer = 3.0;
+      }
+    }
+
+    function handleMonster() {
+      if (!game.monster.active) return;
+
+      if (game.monsterTimer > 0) {
+        game.monsterTimer -= 1 / 60;
+        return;
+      }
+
+      const dx = game.player.x - game.monster.x;
+      const dy = game.player.y - game.monster.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist > 0) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        game.monster.x += nx * game.monster.speed * (1 / 60);
+        game.monster.y += ny * game.monster.speed * (1 / 60);
+      }
+
+      if (dist < game.player.r + game.monster.r + 6) {
+        game.monster.lastHit = 0.6;
+        game.health -= 18;
+        setMessage("The monster hit you!", 1.0);
+        if (game.health <= 0) endGame();
+      }
+    }
+
+    function endGame() {
+      game.over = true;
+      ui.finalText.textContent = `You reached room ${game.roomIndex}. Try again.`;
+      ui.gameOver.classList.add("show");
+    }
+
+    function updatePlayer(dt) {
+      let moveX = 0;
+      let moveY = 0;
+
+      if (keysPressed["w"] || keysPressed["arrowup"]) moveY -= 1;
+      if (keysPressed["s"] || keysPressed["arrowdown"]) moveY += 1;
+      if (keysPressed["a"] || keysPressed["arrowleft"]) moveX -= 1;
+      if (keysPressed["d"] || keysPressed["arrowright"]) moveX += 1;
+
+      const length = Math.hypot(moveX, moveY) || 1;
+      moveX /= length;
+      moveY /= length;
+
+      const speed = game.player.speed * dt;
+      game.player.x += moveX * speed;
+      game.player.y += moveY * speed;
+
+      game.player.x = Math.max(24, Math.min(canvas.width - 24, game.player.x));
+      game.player.y = Math.max(24, Math.min(canvas.height - 24, game.player.y));
+
+      if (game.room.hazard && Math.random() < 0.025) {
+        game.health -= 1;
+        setMessage("The room is cursed!", 0.5);
+      }
+
+      if (game.health <= 0) endGame();
+    }
+
+    function drawBackground() {
+      const glow = 0.45 + Math.sin(game.time * 3.2) * 0.08;
+
+      const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      sky.addColorStop(0, "#0d1625");
+      sky.addColorStop(0.42, "#101b2b");
+      sky.addColorStop(1, "#090d12");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const floorGlow = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height * 0.76, 60,
+        canvas.width / 2, canvas.height * 0.76, 420
+      );
+      floorGlow.addColorStop(0, `rgba(126, 247, 255, ${glow})`);
+      floorGlow.addColorStop(0.3, "rgba(126, 147, 255, 0.3)");
+      floorGlow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = floorGlow;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(16, 16, canvas.width - 32, canvas.height - 32);
+
+      ctx.beginPath();
+      ctx.moveTo(canvas.width * 0.25, canvas.height * 0.82);
+      ctx.lineTo(canvas.width * 0.5, canvas.height * 0.42);
+      ctx.lineTo(canvas.width * 0.75, canvas.height * 0.82);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(124, 136, 176, 0.14)";
+      ctx.fill();
+
+      for (let i = 0; i < 8; i++) {
+        const t = i / 7;
+        const x = canvas.width * (0.25 + t * 0.5);
+        const y1 = canvas.height * (0.82 - t * 0.38);
+        const y2 = canvas.height * 0.82;
+        ctx.beginPath();
+        ctx.moveTo(x, y1);
+        ctx.lineTo(x, y2);
+        ctx.strokeStyle = "rgba(200, 220, 255, 0.12)";
+        ctx.stroke();
+      }
+    }
+
+    function drawDoor(dir, rect, locked) {
+      const depth = 18;
+      const { x, y, w, h } = rect;
+
+      ctx.fillStyle = locked ? "rgba(130, 34, 34, 0.88)" : "rgba(118, 128, 160, 0.88)";
+      ctx.fillRect(x, y, w, h);
+
+      ctx.fillStyle = locked ? "rgba(90, 22, 22, 0.9)" : "rgba(74, 82, 97, 0.9)";
+      ctx.fillRect(x + w, y + 8, depth, h - 16);
+      ctx.fillRect(x + 6, y + h, w - 12, depth);
+
+      ctx.fillStyle = "rgba(10, 14, 20, 1)";
+      ctx.fillRect(x + 4, y + 4, w - 8, h - 8);
+
+      ctx.fillStyle = locked ? "#ffd0d0" : "#d4f9d9";
+      ctx.font = "bold 16px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(doorKeyFor(dir), x + w / 2, y + h / 2);
+    }
+
+    function drawRoom() {
+      const room = game.room;
+      const doorRects = getDoorPositions();
+
+      for (const dir of directions) {
+        if (!room.doors[dir]) continue;
+        drawDoor(dir, doorRects[dir], room.locked[dir]);
+      }
+
+      if (room.key) {
+        const glow = 0.7 + Math.sin(game.time * 6) * 0.25;
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(255, 220, 92, ${glow})`;
+        ctx.arc(room.keyPos.x, room.keyPos.y, 10, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#fff4b2";
+        ctx.fillRect(room.keyPos.x - 2, room.keyPos.y - 5, 4, 12);
+        ctx.fillRect(room.keyPos.x - 10, room.keyPos.y - 2, 20, 4);
+      }
+
+      if (room.closet) {
+        ctx.fillStyle = "rgba(138, 171, 255, 0.82)";
+        ctx.fillRect(room.closetPos.x - 18, room.closetPos.y - 18, 36, 36);
+        ctx.strokeStyle = "#dfe7ff";
+        ctx.strokeRect(room.closetPos.x - 18, room.closetPos.y - 18, 36, 36);
+      }
+
+      if (room.hazard) {
+        ctx.fillStyle = "rgba(255, 90, 90, 0.12)";
+        ctx.fillRect(40, 40, canvas.width - 80, canvas.height - 80);
+      }
+    }
+
+    function drawPlayer() {
+      const p = game.player;
+
+      ctx.beginPath();
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.ellipse(p.x, p.y + 18, p.r * 1.4, p.r * 0.9, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      const grad = ctx.createRadialGradient(p.x - 3, p.y - 6, 2, p.x, p.y, p.r + 10);
+      grad.addColorStop(0, "#dffcff");
+      grad.addColorStop(0.4, "#7ef7ff");
+      grad.addColorStop(1, "#2f89ff");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.fillStyle = "#ffffff";
+      ctx.arc(p.x - 5, p.y - 4, 3, 0, Math.PI * 2);
+      ctx.arc(p.x + 5, p.y - 4, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "#d5f6ff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y + 4, 5, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+    }
+
+    function drawMonster() {
+      if (!game.monster.active) return;
+
+      ctx.beginPath();
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.ellipse(game.monster.x, game.monster.y + 20, game.monster.r * 1.5, game.monster.r * 0.9, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      const glow = ctx.createRadialGradient(
+        game.monster.x, game.monster.y, 2,
+        game.monster.x, game.monster.y, game.monster.r + 12
+      );
+      glow.addColorStop(0, "#ff9aa5");
+      glow.addColorStop(0.3, "#ff4c66");
+      glow.addColorStop(1, "#0d0d12");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(game.monster.x, game.monster.y, game.monster.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.fillStyle = "#ffc3ce";
+      ctx.arc(game.monster.x - 5, game.monster.y - 4, 3, 0, Math.PI * 2);
+      ctx.arc(game.monster.x + 5, game.monster.y - 4, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "#ff6b7a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(game.monster.x, game.monster.y + 7, 7, 0.5, Math.PI - 0.5);
+      ctx.stroke();
+    }
+
+    function drawUiLegend() {
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.font = "bold 15px Arial";
+      ctx.textAlign = "left";
+      ctx.fillText("Room Doors: 1 Left | 2 Right | 3 Up | 4 Down", 20, canvas.height - 18);
+    }
+
+    function draw() {
+      drawBackground();
+      drawRoom();
+      drawPlayer();
+      drawMonster();
+      drawUiLegend();
+    }
+
+    function handleKeyUse() {
+      if (keysPressed["1"]) useDoor("left");
+      if (keysPressed["2"]) useDoor("right");
+      if (keysPressed["3"]) useDoor("up");
+      if (keysPressed["4"]) useDoor("down");
+
+      keysPressed["1"] = false;
+      keysPressed["2"] = false;
+      keysPressed["3"] = false;
+      keysPressed["4"] = false;
+    }
+
+    function setTouchButtonState(el, active) {
+      el.classList.toggle("active", active);
+    }
+
+    function bindTouchButton(element, key) {
+      const press = (e) => {
+        e.preventDefault();
+        keysPressed[key] = true;
+        setTouchButtonState(element, true);
+      };
+
+      const release = (e) => {
+        e.preventDefault();
+        keysPressed[key] = false;
+        setTouchButtonState(element, false);
+      };
+
+      element.addEventListener("pointerdown", press);
+      element.addEventListener("pointerup", release);
+      element.addEventListener("pointerleave", release);
+      element.addEventListener("pointercancel", release);
+    }
+
+    document.querySelectorAll("[data-move]").forEach((btn) => {
+      const key = btn.dataset.move.toLowerCase();
+      bindTouchButton(btn, key);
+    });
+
+    document.querySelectorAll("[data-door]").forEach((btn) => {
+      const key = btn.dataset.door;
+      bindTouchButton(btn, key);
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const map = { 1: "left", 2: "right", 3: "up", 4: "down" };
+        useDoor(map[key]);
+      });
+    });
+
+    window.addEventListener("keydown", (e) => {
+      const key = e.key.toLowerCase();
+      keysPressed[key] = true;
+
+      if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) {
+        e.preventDefault();
+      }
+
+      if (key === "enter" && !game.started) {
+        resetGame();
+      }
+    });
+
+    window.addEventListener("keyup", (e) => {
+      keysPressed[e.key.toLowerCase()] = false;
+    });
+
+    function gameLoop() {
+      const dt = 1 / 60;
+      game.time += dt;
+
+      if (game.started && !game.over) {
+        updatePlayer(dt);
+        pickupKeyIfNear();
+        useClosetIfNear();
+        handleMonster();
+        handleKeyUse();
+        updateHud();
+
+        if (game.messageTimer > 0) {
+          game.messageTimer -= dt;
+          if (game.messageTimer <= 0) hideMessage();
+        }
+      }
+
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    document.getElementById("startBtn").addEventListener("click", resetGame);
+    document.getElementById("restartBtn").addEventListener("click", resetGame);
+
+    ui.titleScreen.style.display = "flex";
+    ui.gameOver.classList.remove("show");
+    game.room = createRoom(1);
+    updateHud();
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
