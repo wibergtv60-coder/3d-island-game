@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover" />
+  <title>Ohio Tools — Mobile & NPCs</title>
+  <style>
+    html,body { margin:0; height:100%; width:100%; overflow:hidden; background:#87ceeb; font-family:Arial,Helvetica,sans-serif; -webkit-user-select:none; -ms-user-select:none; user-select:none; -webkit-touch-callout:none; }
+    canvas { display:block; width:100%; height:100%; }
+
+    /* HUD */
+    #hud {
+      position: fixed; left: 12px; top: 12px; z-index: 30;
+      background: rgba(0,0,0,0.45); color:#fff; padding:10px; border-radius:8px;
+      font-size:14px; min-width:220px;
+    }
+    #hpbar { width:200px; height:16px; background:#441111; border-radius:8px; overflow:hidden; margin-top:6px; }
+    #hpfill { height:100%; background:#27d34d; width:100%; transition:width .12s; }
+
+    #slots { margin-top:8px; display:flex; gap:8px; }
+    .slot { flex:1; background:rgba(255,255,255,0.06); padding:8px; border-radius:6px; text-align:center; font-size:12px; }
+    .selected { outline:3px solid #fff2; box-shadow:0 0 8px #ffe600 inset; }
+
+    #msg { position:fixed; left:50%; top:10%; transform:translateX(-50%); z-index:30; color:#fff; text-shadow:0 0 8px #000; font-size:18px; }
+
+    /* start/overlay */
+    #start { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:40; background:rgba(0,0,0,0.35); }
+    #start .box { background:rgba(0,0,0,0.7); padding:24px; border-radius:12px; color:#fff; text-align:center; max-width:320px; }
+
+    /* mobile controls */
+    #touchLeft {
+      position: fixed; left: 12px; bottom: 12px; width: 40%; height: 40%;
+      max-width:320px; max-height:320px; touch-action: none; z-index: 35;
+    }
+    .joyBase {
+      position:absolute; left:0; bottom:0; width:140px; height:140px; border-radius:70px;
+      background: rgba(0,0,0,0.25); display:flex; align-items:center; justify-content:center;
+      -webkit-tap-highlight-color: transparent; box-shadow: 0 0 0 2px rgba(255,255,255,0.1) inset;
+    }
+    .joyKnob { width:56px; height:56px; border-radius:28px; background:rgba(255,255,255,0.26); transform:translate(0,0); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+
+    #touchRight {
+      position: fixed; right: 12px; bottom: 12px; width: 34%; height: 40%;
+      max-width:300px; max-height:300px; z-index:35; pointer-events:none;
+    }
+    .btn {
+      position:absolute; width:72px; height:72px; border-radius:36px; background:rgba(0,0,0,0.35);
+      color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; pointer-events:auto;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      transition: all 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { transform: scale(0.95); background:rgba(0,0,0,0.55); }
+    #btnJump { right:18px; bottom:18px; }
+    #btnUse { right:100px; bottom:18px; }
+    #btnSwap { right:18px; bottom:100px; width:56px; height:56px; border-radius:28px; font-size:18px; }
+
+    /* small help */
+    #help { position:fixed; right:12px; top:12px; z-index:30; color:#eee; background:rgba(0,0,0,0.35); padding:8px; border-radius:8px; font-size:12px; max-width:160px; }
+
+    @media (min-width:900px) {
+      /* on desktop, hide big mobile areas */
+      #touchLeft, #touchRight { display:none; }
+      #help { display:none; }
+    }
+
+    @media (max-width: 600px) {
+      #hud { font-size:12px; padding:8px; min-width:180px; }
+      #hpbar { width:150px; }
+      .btn { width:60px; height:60px; font-size:12px; }
+      #btnSwap { width:48px; height:48px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div style="font-weight:700">OHIO TOOLS</div>
+    <div>Health: <span id="hpText">100</span></div>
+    <div id="hpbar"><div id="hpfill"></div></div>
+    <div id="slots">
+      <div id="slot0" class="slot">1: <span id="t0">—</span></div>
+      <div id="slot1" class="slot">2: <span id="t1">—</span></div>
+    </div>
+  </div>
+
+  <div id="help">Left: Move<br>Right: Look<br>Buttons: Jump/Use</div>
+  <div id="msg">Tap to start</div>
+
+  <div id="start">
+    <div class="box">
+      <h2>Ohio Tools</h2>
+      <p>Move with left joystick, look with right screen, use buttons to fight!</p>
+      <p>Tap anywhere to start</p>
+    </div>
+  </div>
+
+  <!-- left joystick area for mobile -->
+  <div id="touchLeft">
+    <div class="joyBase" id="joyBase" style="left:12px; bottom:12px;">
+      <div class="joyKnob" id="joyKnob"></div>
+    </div>
+  </div>
+
+  <!-- right buttons -->
+  <div id="touchRight">
+    <div id="btnUse" class="btn">USE</div>
+    <div id="btnJump" class="btn">JUMP</div>
+    <div id="btnSwap" class="btn">⇄</div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.158.0/build/three.module.js"
+    }
+  }
+  </script>
+
+  <script type="module">
+  import * as THREE from "three";
+  import { PointerLockControls } from "https://unpkg.com/three@0.158.0/examples/jsm/controls/PointerLockControls.js";
+
+  // Scene & renderer
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87ceeb);
+  scene.fog = new THREE.Fog(0x87ceeb, 120, 360);
+
+  const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 800);
+  const renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // Detect if mobile
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  // Lighting
+  scene.add(new THREE.HemisphereLight(0xbfeaff, 0x445522, 1.3));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+  sun.position.set(50,120,30);
+  sun.castShadow = true;
+  scene.add(sun);
+
+  // Basic materials
+  function mat(color) { return new THREE.MeshStandardMaterial({ color, roughness:0.8 }); }
+  function boxMesh(c,x,y,z){ const m = new THREE.Mesh(new THREE.BoxGeometry(x,y,z), mat(c)); m.castShadow=true; m.receiveShadow=true; return m; }
+  function sphereMesh(c,r){ const m = new THREE.Mesh(new THREE.SphereGeometry(r,16,12), mat(c)); m.castShadow=true; return m; }
+  function cylinderMesh(c,r,h){ const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,12), mat(c)); m.castShadow=true; return m; }
+
+  // Map
+  const MAP_SIZE = 180, HALF = MAP_SIZE/2;
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(MAP_SIZE, MAP_SIZE), mat(0x2f7a3f));
+  ground.rotation.x = -Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+
+  const wallH = 8;
+  const wallC = 0x6b4226;
+  const north = boxMesh(wallC, MAP_SIZE, wallH, 3); north.position.set(0, wallH/2, -HALF); scene.add(north);
+  const south = boxMesh(wallC, MAP_SIZE, wallH, 3); south.position.set(0, wallH/2, HALF); scene.add(south);
+  const west = boxMesh(wallC, 3, wallH, MAP_SIZE); west.position.set(-HALF, wallH/2, 0); scene.add(west);
+  const east = boxMesh(wallC, 3, wallH, MAP_SIZE); east.position.set(HALF, wallH/2, 0); scene.add(east);
+
+  // Houses around
+  for(let i=0;i<18;i++){
+    const h = boxMesh(0xa95132, 8,7,8);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(6,4,4), mat(0x54231d));
+    const angle = (i/18)*Math.PI*2;
+    const r = 62 + (i%2)*9;
+    h.position.set(Math.cos(angle)*r, 3.5, Math.sin(angle)*r);
+    roof.position.set(h.position.x, 8.5, h.position.z); roof.rotation.y = Math.PI/4;
+    scene.add(h, roof);
+  }
+
+  // Tools
+  const TOOLS = ["Hug Spoon", "Train Airstrike", "🗿 Moai", "Fizza Gun"];
+  function randTool(){ return TOOLS[Math.floor(Math.random()*TOOLS.length)]; }
+  function randTwo(){ return [randTool(), randTool()]; }
+
+  // Player and physics
+  const player = {
+    group: new THREE.Group(),
+    pos: new THREE.Vector3(0,0,0),
+    velY: 0,
+    onGround: true,
+    speed: 10,
+    health: 100,
+    inv: randTwo(),
+    selected: 0,
+    alive: true
+  };
+
+  // simple player visual (capsule-like)
+  const torso = boxMesh(0x246bdb, 1.4, 1.8, 1.0);
+  const head = sphereMesh(0x88c0ff, 0.45); head.position.set(0,1.45,0);
+  const legL = cylinderMesh(0x123c8a, 0.12, 1.0); legL.position.set(-0.28,-0.5,0);
+  const legR = cylinderMesh(0x123c8a, 0.12, 1.0); legR.position.set(0.28,-0.5,0);
+  player.group.add(torso, head, legL, legR);
+  player.group.position.set(0,1.0,0);
+  scene.add(player.group);
+
+  // camera initial
+  camera.position.set(0,1.6,5);
+
+  // controls
+  const controls = new PointerLockControls(camera, renderer.domElement);
+  const startOverlay = document.getElementById('start');
+  
+  function startGame(){
+    controls.lock();
+    startOverlay.style.display='none';
+    document.getElementById('msg').style.display='none';
+  }
+
+  startOverlay.addEventListener('click', startGame);
+  renderer.domElement.addEventListener('click', ()=>{ if (!controls.isLocked) startGame(); });
+
+  controls.addEventListener('lock', ()=> { startOverlay.style.display='none'; document.getElementById('msg').style.display='none'; });
+  controls.addEventListener('unlock', ()=> { if (!isMobile) { startOverlay.style.display='flex'; document.getElementById('msg').style.display='block'; } });
+
+  // Mobile touch-look: maintain yaw/pitch when not pointer-locked
+  let yaw = 0, pitch = 0;
+  let isTouchLooking = false;
+  let lastTouchY = 0, lastTouchX = 0;
+  const LOOK_SPEED = isMobile ? 0.006 : 0.004;
+
+  // joystick
+  const joyBase = document.getElementById('joyBase');
+  const joyKnob = document.getElementById('joyKnob');
+  let joyActive=false, joyId=null, joyStartX=0, joyStartY=0, joyVec = {x:0,y:0};
+
+  function resetJoy(){ joyKnob.style.transform='translate(0px,0px)'; joyVec={x:0,y:0}; }
+
+  joyBase.addEventListener('touchstart', (e)=>{
+    for(const t of e.changedTouches){
+      if (joyId===null){ joyId=t.identifier; joyActive=true; joyStartX=t.clientX; joyStartY=t.clientY; e.preventDefault(); break; }
+    }
+  }, {passive:false});
+  
+  joyBase.addEventListener('touchmove', (e)=>{
+    for(const t of e.changedTouches) {
+      if (t.identifier===joyId){
+        const dx = t.clientX - joyStartX, dy = t.clientY - joyStartY;
+        const max = 56;
+        const nx = Math.max(-1,Math.min(1, dx/max));
+        const ny = Math.max(-1,Math.min(1, dy/max));
+        joyVec = {x:nx, y:-ny};
+        joyKnob.style.transform = `translate(${nx*40}px, ${-ny*40}px)`;
+        e.preventDefault();
+      }
+    }
+  }, {passive:false});
+  
+  joyBase.addEventListener('touchend', (e)=>{
+    for(const t of e.changedTouches){
+      if (t.identifier===joyId){ joyId=null; joyActive=false; resetJoy(); e.preventDefault(); break;}
+    }
+  }, {passive:false});
+
+  // right side look and buttons
+  const touchRight = document.getElementById('touchRight');
+  const btnUse = document.getElementById('btnUse');
+  const btnJump = document.getElementById('btnJump');
+  const btnSwap = document.getElementById('btnSwap');
+
+  // make buttons work on touch with visual feedback
+  btnUse.addEventListener('touchstart',(e)=>{ e.preventDefault(); useTool(player, player.inv[player.selected]); }, {passive:false});
+  btnJump.addEventListener('touchstart',(e)=>{ e.preventDefault(); doJump(player); }, {passive:false});
+  btnSwap.addEventListener('touchstart',(e)=>{ e.preventDefault(); player.selected = 1-player.selected; updateHUD(); }, {passive:false});
+
+  // Also support click for desktop
+  btnUse.addEventListener('click',(e)=>{ if (controls.isLocked) useTool(player, player.inv[player.selected]); });
+  btnJump.addEventListener('click',(e)=>{ if (controls.isLocked) doJump(player); });
+  btnSwap.addEventListener('click',(e)=>{ player.selected = 1-player.selected; updateHUD(); });
+
+  // desktop keyboard & mouse
+  const keys = {};
+  window.addEventListener('keydown',(e)=>{ 
+    keys[e.key.toLowerCase()] = true; 
+    if (e.key==='1'){ player.selected=0; updateHUD(); } 
+    if (e.key==='2'){ player.selected=1; updateHUD(); } 
+    if (e.key===' '){ doJump(player); } 
+  });
+  window.addEventListener('keyup',(e)=>{ keys[e.key.toLowerCase()] = false; });
+
+  // look on touch (right half of screen)
+  renderer.domElement.addEventListener('touchstart', (e)=>{
+    if (e.touches.length===1){
+      const t = e.touches[0];
+      if (t.clientX > innerWidth*0.5){
+        isTouchLooking = true; lastTouchX=t.clientX; lastTouchY=t.clientY; e.preventDefault();
+      }
+    }
+  }, {passive:false});
+  
+  renderer.domElement.addEventListener('touchmove', (e)=>{
+    if (isTouchLooking && e.touches.length===1){
+      const t=e.touches[0];
+      const dx = t.clientX - lastTouchX, dy = t.clientY - lastTouchY;
+      yaw -= dx * LOOK_SPEED;
+      pitch -= dy * LOOK_SPEED;
+      pitch = Math.max(-Math.PI/2+0.1, Math.min(Math.PI/2-0.1, pitch));
+      lastTouchX = t.clientX; lastTouchY = t.clientY;
+      e.preventDefault();
+    }
+  }, {passive:false});
+  
+  renderer.domElement.addEventListener('touchend', (e)=>{ isTouchLooking=false; }, {passive:false});
+
+  // HUD
+  const hpText = document.getElementById('hpText');
+  const hpFill = document.getElementById('hpfill');
+  function updateHUD(){ 
+    hpText.textContent = Math.max(0, Math.round(player.health)); 
+    hpFill.style.width = Math.max(0, player.health)+'%'; 
+    document.getElementById('t0').textContent = player.inv[0]; 
+    document.getElementById('t1').textContent = player.inv[1]; 
+    document.getElementById('slot0').classList.toggle('selected', player.selected===0); 
+    document.getElementById('slot1').classList.toggle('selected', player.selected===1); 
+  }
+  updateHUD();
+
+  // Entities & NPCs
+  const NPCS = [];
+  const ENTITIES = [];
+
+  function createHumanoid(color){
+    const g = new THREE.Group();
+    const torso = boxMesh(color, 1.2, 1.6, 0.9);
+    const head = sphereMesh(0xffe0b8, 0.4); head.position.set(0,1.15,0);
+    const armL = boxMesh(0x333333, 0.2, 1.0, 0.2); armL.position.set(-0.75,0.1,0);
+    const armR = boxMesh(0x333333, 0.2, 1.0, 0.2); armR.position.set(0.75,0.1,0);
+    const legL = boxMesh(0x222222, 0.25, 1.0, 0.25); legL.position.set(-0.25,-1.0,0);
+    const legR = boxMesh(0x222222, 0.25, 1.0, 0.25); legR.position.set(0.25,-1.0,0);
+    g.add(torso, head, armL, armR, legL, legR);
+    return g;
+  }
+
+  function spawnNPC(angle){
+    const npc = {
+      group: createHumanoid(0xd63b3b),
+      pos: new THREE.Vector3(Math.cos(angle)*70,0,Math.sin(angle)*70),
+      velY: 0,
+      onGround: true,
+      health: 100,
+      speed: 2 + Math.random()*1.8,
+      inv: randTwo(),
+      selected: 0,
+      alive: true,
+      jumpCooldown: 0,
+      attackCooldown: 0,
+      tag: 'npc'
+    };
+    npc.group.position.copy(npc.pos).y = 1.0;
+    scene.add(npc.group);
+    NPCS.push(npc);
+    return npc;
+  }
+
+  for(let i=0;i<10;i++) spawnNPC((i/10)*Math.PI*2 + Math.random()*0.2);
+
+  // Tools: behaviors
+  function useTool(user, tool){
+    if (!tool) return;
+    if (tool === "Hug Spoon"){
+      const pos = user.group ? user.group.position.clone() : user.pos.clone();
+      const range = 3.0;
+      const targets = (user.tag === 'npc') ? [player].concat(NPCS) : NPCS.concat([player]);
+      for(const t of targets){
+        if (t===user) continue;
+        if (!t.alive) continue;
+        const tpos = t.group ? t.group.position : t.pos;
+        if (pos.distanceTo(tpos) <= range){
+          applyDamage(t, 30);
+        }
+      }
+      flashMsg(user===player ? "HUG SPOON!" : "NPC slashed");
+      return;
+    }
+
+    if (tool === "Fizza Gun"){
+      const origin = (user.group ? user.group.position.clone() : user.pos.clone());
+      origin.y += 0.9;
+      const dir = new THREE.Vector3();
+      if (user.tag === 'npc'){
+        dir.copy(player.pos).sub(origin).setY(0).normalize();
+      } else {
+        const v = new THREE.Vector3();
+        if (controls.isLocked){
+          camera.getWorldDirection(v); 
+        } else {
+          v.set(Math.sin(yaw), 0, Math.cos(yaw));
+        }
+        v.y=0; v.normalize();
+        dir.copy(v);
+      }
+      const proj = boxMesh(0xffb000, 0.4,0.4,0.4);
+      proj.position.copy(origin);
+      scene.add(proj);
+      ENTITIES.push({ type:'proj', mesh:proj, vel: dir.multiplyScalar(30), owner:user, life:3 });
+      return;
+    }
+
+    if (tool === "Train Airstrike"){
+      const target = (user.tag==='npc') ? player.pos.clone() : player.pos.clone().add(new THREE.Vector3((Math.random()-0.5)*18,0,(Math.random()-0.5)*18));
+      const train = boxMesh(0x222222, 6,2.5,3);
+      train.position.set(target.x, 70, target.z);
+      scene.add(train);
+      ENTITIES.push({ type:'train', mesh: train, target: target.clone(), owner:user });
+      return;
+    }
+
+    if (tool === "🗿 Moai"){
+      const spawn = (user.group ? user.group.position.clone() : user.pos.clone());
+      spawn.y += 0.8;
+      const moai = cylinderMesh(0x888888, 1.1, 3.0);
+      moai.position.copy(spawn);
+      scene.add(moai);
+      ENTITIES.push({ type:'moai', mesh:moai, owner:user, life:6 });
+      return;
+    }
+  }
+
+  function applyDamage(target, amount){
+    if (!target.alive) return;
+    target.health -= amount;
+    target.group && (target.group.traverse(c=> { if (c.material) c.material.emissive && c.material.emissive.setHex(0xff0000); }));
+    setTimeout(()=> {
+      target.group && (target.group.traverse(c=> { if (c.material) c.material.emissive && c.material.emissive.setHex(0x000000); }));
+    },120);
+    if (target.health <= 0){
+      target.alive = false;
+      scene.remove(target.group);
+      if (target===player){ onPlayerDeath(); }
+    }
+  }
+
+  function onPlayerDeath(){
+    flashMsg("You died");
+    player.alive = false;
+    setTimeout(()=> {
+      player.health = 100;
+      player.inv = randTwo();
+      player.selected = 0;
+      player.pos.set(0,0,0);
+      player.group.position.set(0,1.0,0);
+      player.velY = 0; player.onGround = true; player.alive = true;
+      updateHUD();
+      flashMsg("Respawned with new tools", 1400);
+    }, 1400);
+  }
+
+  // player jump
+  function doJump(ent){
+    if (!ent.onGround) return;
+    ent.velY = 9.2; ent.onGround = false;
+  }
+
+  // show temporary message
+  let msgTimeout = null;
+  function flashMsg(txt, ms=700){
+    const el = document.getElementById('msg'); el.textContent = txt; el.style.display='block';
+    if (msgTimeout) clearTimeout(msgTimeout);
+    msgTimeout = setTimeout(()=>{ if (controls.isLocked) el.style.display='none'; }, ms);
+  }
+
+  // click/tap handlers
+  window.addEventListener('mousedown', (e)=>{
+    if (!controls.isLocked) return;
+    if (e.button===0) useTool(player, player.inv[player.selected]);
+  });
+
+  // NPC behavior
+  function npcAI(npc, dt){
+    if (!npc.alive) return;
+    let nearest = null; let bestD = 1e9;
+    const candidates = [player].concat(NPCS);
+    for(const c of candidates){
+      if (c===npc) continue;
+      if (!c.alive) continue;
+      const posC = c.group ? c.group.position : c.pos;
+      const d = npc.group.position.distanceTo(posC);
+      if (d < bestD){ bestD = d; nearest = c; }
+    }
+    if (!nearest) return;
+    const targetPos = nearest.group ? nearest.group.position.clone() : nearest.pos.clone();
+    const dir = targetPos.clone().sub(npc.group.position); dir.y = 0;
+    const dist = dir.length();
+    if (dist > 2.2){
+      dir.normalize();
+      npc.group.position.addScaledVector(dir, dt * npc.speed);
+      if (npc.onGround && npc.jumpCooldown <= 0 && Math.random() < 0.008){
+        npc.velY = 7.8; npc.onGround = false; npc.jumpCooldown = 1.6 + Math.random()*1.6;
+      }
+    } else {
+      if (npc.attackCooldown <= 0){
+        npc.selected = Math.floor(Math.random()*2);
+        useTool(npc, npc.inv[npc.selected]);
+        npc.attackCooldown = 0.8 + Math.random()*1.6;
+      }
+      if (npc.onGround && Math.random() < 0.02){ npc.velY = 6.5; npc.onGround = false; }
+    }
+    const look = targetPos.clone().sub(npc.group.position); look.y = 0;
+    if (look.lengthSq() > 0.001){
+      const a = Math.atan2(look.x, look.z);
+      npc.group.rotation.y += (a - npc.group.rotation.y) * 0.12;
+    }
+    npc.jumpCooldown = Math.max(0, npc.jumpCooldown - dt);
+    npc.attackCooldown = Math.max(0, npc.attackCooldown - dt);
+  }
+
+  // update entities
+  function updateEntities(dt){
+    for(let i=ENTITIES.length-1;i>=0;i--){
+      const e = ENTITIES[i];
+      if (e.type==='proj'){
+        e.mesh.position.addScaledVector(e.vel, dt);
+        e.life -= dt;
+        if (e.owner !== player){
+          if (player.alive && e.mesh.position.distanceTo(player.group.position) < 1.6){ applyDamage(player, 18); e.life = 0; }
+        } else {
+          for(const n of NPCS){ if (n.alive && e.mesh.position.distanceTo(n.group.position) < 1.6){ applyDamage(n, 28); e.life = 0; break; } }
+        }
+        if (e.life <= 0){ scene.remove(e.mesh); ENTITIES.splice(i,1); continue; }
+      } else if (e.type==='train'){
+        e.mesh.position.y -= dt * 45;
+        if (e.mesh.position.y <= 1.8){
+          const pos = e.mesh.position.clone();
+          spawnBlast(pos, 8);
+          if (player.group.position.distanceTo(pos) < 10) applyDamage(player, 45);
+          for(const n of NPCS) if (n.alive && n.group.position.distanceTo(pos) < 10) applyDamage(n, 45);
+          scene.remove(e.mesh); ENTITIES.splice(i,1); continue;
+        }
+      } else if (e.type==='moai'){
+        let target = null; let bestD=1e9;
+        const candidates = (e.owner===player) ? NPCS : [player].concat(NPCS);
+        for(const c of candidates){
+          if (!c.alive) continue;
+          if (c===e.owner) continue;
+          const d = e.mesh.position.distanceTo(c.group ? c.group.position : c.pos);
+          if (d < bestD){ bestD=d; target=c; }
+        }
+        if (target){
+          const tpos = target.group ? target.group.position : target.pos;
+          const dir = tpos.clone().sub(e.mesh.position); dir.y=0; dir.normalize();
+          e.mesh.position.addScaledVector(dir, dt*8);
+          if (e.mesh.position.distanceTo(tpos) < 1.8){
+            applyDamage(target, 32);
+            scene.remove(e.mesh); ENTITIES.splice(i,1); continue;
+          }
+        }
+        e.life -= dt;
+        if (e.life <= 0){ scene.remove(e.mesh); ENTITIES.splice(i,1); continue; }
+      }
+    }
+  }
+
+  function spawnBlast(pos, radius){
+    const geom = new THREE.SphereGeometry(radius, 12, 12);
+    const matBlast = new THREE.MeshBasicMaterial({ color:0xffcc55, transparent:true, opacity:0.85 });
+    const sphere = new THREE.Mesh(geom, matBlast); sphere.position.copy(pos); scene.add(sphere);
+    setTimeout(()=> scene.remove(sphere), 350);
+  }
+
+  // physics step
+  const GRAV = -28;
+  function physicsStep(ent, dt){
+    ent.velY += GRAV * dt;
+    ent.group.position.y += ent.velY * dt;
+    if (ent.group.position.y <= 1.0){
+      ent.group.position.y = 1.0;
+      ent.velY = 0;
+      ent.onGround = true;
+    } else {
+      ent.onGround = false;
+    }
+  }
+
+  // movement & camera update
+  function updatePlayer(dt){
+    if (!player.alive) return;
+    const move = new THREE.Vector3();
+    if (joyActive){
+      move.x = joyVec.x;
+      move.z = joyVec.y;
+    } else {
+      if (keys['w']) move.z -= 1;
+      if (keys['s']) move.z += 1;
+      if (keys['a']) move.x -= 1;
+      if (keys['d']) move.x += 1;
+    }
+    if (move.lengthSq() > 0.001){
+      move.normalize();
+      let forward = new THREE.Vector3();
+      if (controls.isLocked){
+        camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
+      } else {
+        const cy = Math.cos(yaw), sy = Math.sin(yaw);
+        forward.set(sy, 0, cy);
+      }
+      const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), forward).normalize();
+      const delta = new THREE.Vector3();
+      delta.addScaledVector(forward, -move.z * player.speed * dt);
+      delta.addScaledVector(right, move.x * player.speed * dt);
+      player.group.position.add(delta);
+    }
+    player.group.position.x = THREE.MathUtils.clamp(player.group.position.x, -HALF+4, HALF-4);
+    player.group.position.z = THREE.MathUtils.clamp(player.group.position.z, -HALF+4, HALF-4);
+    physicsStep(player, dt);
+    if (controls.isLocked){
+      camera.position.copy(player.group.position).add(new THREE.Vector3(0,1.6,0));
+    } else {
+      const offset = new THREE.Vector3(0,1.6,0);
+      camera.position.copy(player.group.position).add(offset);
+      const lookDir = new THREE.Vector3(Math.sin(yaw), Math.sin(pitch), Math.cos(yaw));
+      camera.lookAt(camera.position.clone().add(lookDir));
+    }
+  }
+
+  // update NPCs
+  function updateNPCs(dt){
+    for(const n of NPCS){
+      if (!n.alive){
+        if (Math.random() < 0.001){
+          const a = Math.random()*Math.PI*2; spawnNPC(a);
+        }
+        continue;
+      }
+      npcAI(n, dt);
+      n.group.position.x = THREE.MathUtils.clamp(n.group.position.x, -HALF+4, HALF-4);
+      n.group.position.z = THREE.MathUtils.clamp(n.group.position.z, -HALF+4, HALF-4);
+      physicsStep(n, dt);
+      const t = performance.now()*0.006;
+      n.group.children.forEach(c=>{
+        if (c.geometry && c.geometry.type === 'BoxGeometry' && c.position.y < 0){
+          c.rotation.x = Math.sin(t + n.group.position.x*0.02)*0.15;
+        }
+      });
+    }
+  }
+
+  function updateAllEntities(dt){
+    updateEntities(dt);
+  }
+
+  // run loop
+  let last = performance.now();
+  function animate(now){
+    const dt = Math.min(0.045, (now-last)/1000); last = now;
+    updatePlayer(dt);
+    updateNPCs(dt);
+    updateAllEntities(dt);
+    updateHUD();
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  }
+  requestAnimationFrame(animate);
+
+  // sync yaw/pitch from pointer lock
+  document.addEventListener('mousemove', (e)=>{
+    if (controls.isLocked){
+      const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+      yaw = Math.atan2(dir.x, dir.z);
+      pitch = Math.asin(dir.y);
+    }
+  });
+
+  // window resize
+  window.addEventListener('resize', ()=>{
+    camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight);
+  });
+
+  updateHUD();
+
+  </script>
+</body>
+</html>
