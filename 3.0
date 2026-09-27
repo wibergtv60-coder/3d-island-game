@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Doors 3D Demo</title>
+  <style>
+    :root {
+      --bg: #090b14;
+      --panel: rgba(14, 17, 28, 0.8);
+      --text: #edf3ff;
+      --accent: #7bdff2;
+      --accent2: #ffd166;
+      --danger: #ff5d73;
+      --success: #7ef29a;
+      --shadow: rgba(0,0,0,0.45);
+    }
+
+    * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; width: 100%; height: 100%;
+      background: radial-gradient(circle at top, #1e2438 0%, #090b14 55%, #04060b 100%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+    }
+
+    #gameWrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      max-width: 1000px;
+      background: #070910;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: linear-gradient(#121826 0%, #090d16 100%);
+    }
+
+    #hud {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .topBar {
+      position: absolute;
+      top: max(14px, env(safe-area-inset-top));
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 12px 28px var(--shadow);
+      border-radius: 14px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .status {
+      padding: 8px 14px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-size: 12px;
+    }
+
+    #levelLabel {
+      color: var(--accent);
+    }
+
+    #keysLabel {
+      color: var(--accent2);
+    }
+
+    #message {
+      position: absolute;
+      left: 50%;
+      top: 60px;
+      transform: translateX(-50%);
+      min-width: min(76vw, 360px);
+      text-align: center;
+      background: rgba(7, 10, 16, 0.7);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      box-shadow: 0 10px 30px var(--shadow);
+      padding: 12px 18px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      pointer-events: none;
+    }
+
+    #message.show {
+      opacity: 1;
+    }
+
+    #touchControls {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: max(10px, env(safe-area-inset-bottom));
+      height: 190px;
+      pointer-events: none;
+    }
+
+    .pad, .actionPad {
+      position: absolute;
+      pointer-events: auto;
+    }
+
+    .pad {
+      left: 16px;
+      bottom: 18px;
+      width: 148px;
+      height: 148px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      border: 2px solid rgba(255,255,255,0.09);
+      box-shadow: inset 0 0 20px rgba(255,255,255,0.04), 0 8px 20px rgba(0,0,0,0.18);
+    }
+
+    .stick {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.22);
+      box-shadow: inset 0 0 20px rgba(255,255,255,0.08);
+    }
+
+    .actionPad {
+      right: 16px;
+      bottom: 26px;
+      width: 180px;
+      height: 110px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .btn {
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.08);
+      color: white;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+      touch-action: none;
+    }
+
+    #interactButton { background: rgba(123,223,242,0.16); color: var(--accent); }
+    #runButton { background: rgba(255,209,102,0.16); color: var(--accent2); }
+    #restartButton { background: rgba(255,93,115,0.18); color: #ffd7de; grid-column: 1 / -1; }
+
+    @media (min-width: 700px) {
+      .pad { width: 170px; height: 170px; }
+      .stick { width: 64px; height: 64px; }
+      .actionPad { width: 210px; height: 120px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="gameWrap">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="hud">
+      <div class="topBar">
+        <div class="panel status" id="levelLabel">Level 1</div>
+        <div class="panel status" id="keysLabel">Keys: 0</div>
+      </div>
+      <div id="message">Find the key and escape.</div>
+    </div>
+
+    <div id="touchControls">
+      <div class="pad" id="pad">
+        <div class="stick" id="stick"></div>
+      </div>
+
+      <div class="actionPad">
+        <button class="btn" id="interactButton">Use</button>
+        <button class="btn" id="runButton">Run</button>
+        <button class="btn" id="restartButton">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const levelLabel = document.getElementById('levelLabel');
+    const keysLabel = document.getElementById('keysLabel');
+    const messageBox = document.getElementById('message');
+
+    const pad = document.getElementById('pad');
+    const stick = document.getElementById('stick');
+
+    const interactButton = document.getElementById('interactButton');
+    const runButton = document.getElementById('runButton');
+    const restartButton = document.getElementById('restartButton');
+
+    const levels = [
+      {
+        name: "Hallway",
+        map: [
+          "############################",
+          "#..............#...........#",
+          "#.#####.######.#.##.#.##.#.#",
+          "#.#...#.#....#.#....#....#.#",
+          "#.#.###.#.##.#.####.####.#.#",
+          "#.#.....#....#..K.....#..#.#",
+          "#.#####.######.###.###.##.#",
+          "#.....#....#....#....#....#",
+          "#.###.#.##.#.##.#.##.#.###.#",
+          "#...#.#..#.#....#....#...#.#",
+          "#.#.#.##.#.####.####.##.#.#",
+          "#.#...#..#....#....#....#.#",
+          "#.###.####.##.#.##.#.##.#.#",
+          "#.............#.........#.#",
+          "#.###########.###########.#",
+          "#..............#....#.....#",
+          "#.###.###.####.#.##.#.##.#",
+          "#...#.#.....#..#..#.#....#",
+          "#.#.#.###.#.##.##.#.####.#",
+          "#.#...#...#....#...#....#.#",
+          "#.###.#.###.######.###.#.#",
+          "#...#.#...........#...#.#.#",
+          "#.#.#.#####.#####.#.#.#.#.#",
+          "#.#...#...#...#...#.#.#.#.#",
+          "#.#####.#.#.#.#.#.#.#.#.#.#",
+          "#.....#.#.#.#.#.#.#.#...#.#",
+          "#.###.#.#.#.#.#.#.#.###.#.#",
+          "#...#.#...#...#...#.....#.#",
+          "############################"
+        ],
+        player: { x: 1.5, y: 1.5, angle: 0 },
+        exit: { x: 2, y: 28 }
+      }
+    ];
+
+    const state = {
+      keys: 0,
+      levelIndex: 0,
+      player: { x: 1.5, y: 1.5, angle: 0 },
+      currentMap: [],
+      mapWidth: 0,
+      mapHeight: 0,
+      exit: { x: 2, y: 2 },
+      keyPositions: [],
+      interactionCooldown: 0,
+      runMode: false,
+      moveDir: { x: 0, y: 0 },
+      turnDir: 0,
+      lastTime: 0,
+      showMessageTimer: 0,
+      pedestals: [],
+      enemy: { x: 8.5, y: 6.5, speed: 1.6, dir: 1, phase: 0 }
+    };
+
+    const keyMap = {
+      ArrowUp: "forward",
+      ArrowDown: "backward",
+      ArrowLeft: "left",
+      ArrowRight: "right",
+      w: "forward",
+      s: "backward",
+      a: "left",
+      d: "right",
+      q: "turnLeft",
+      e: "turnRight",
+      " ": "interact"
+    };
+
+    const pressed = new Set();
+
+    function loadLevel(index) {
+      const level = levels[index];
+      state.levelIndex = index;
+      state.currentMap = level.map.map(row => row.split(''));
+      state.mapWidth = state.currentMap[0].length;
+      state.mapHeight = state.currentMap.length;
+      state.player = { ...level.player };
+      state.exit = { ...level.exit };
+      state.keyPositions = [];
+      state.pedestals = [];
+      state.enemy = { x: 8.5, y: 6.5, speed: 1.4 + index * 0.15, dir: 1, phase: 0 };
+
+      for (let y = 0; y < state.mapHeight; y++) {
+        for (let x = 0; x < state.mapWidth; x++) {
+          const cell = state.currentMap[y][x];
+          if (cell === 'K') {
+            state.keyPositions.push({ x: x + 0.5, y: y + 0.5 });
+          }
+          if (cell === 'P') {
+            state.pedestals.push({ x: x + 0.5, y: y + 0.5 });
+          }
+        }
+      }
+
+      state.keys = 0;
+      levelLabel.textContent = `Level ${index + 1}`;
+      keysLabel.textContent = `Keys: ${state.keys}`;
+      showMessage("Find the key and escape.");
+      resizeCanvas();
+    }
+
+    function showMessage(text, duration = 1500) {
+      messageBox.textContent = text;
+      messageBox.classList.add('show');
+      state.showMessageTimer = performance.now() + duration;
+    }
+
+    function resizeCanvas() {
+      const wrap = document.getElementById('gameWrap');
+      canvas.width = Math.floor(wrap.clientWidth * window.devicePixelRatio);
+      canvas.height = Math.floor(wrap.clientHeight * window.devicePixelRatio);
+      ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+    }
+
+    const TILE = 1;
+    function isWall(x, y) {
+      const mapX = Math.floor(x);
+      const mapY = Math.floor(y);
+      if (mapX < 0 || mapY < 0 || mapX >= state.mapWidth || mapY >= state.mapHeight) return true;
+      const c = state.currentMap[mapY][mapX];
+      return c === '#' || c === 'D' || c === 'K' || c === 'E';
+    }
+
+    function getCell(x, y) {
+      const mapX = Math.floor(x);
+      const mapY = Math.floor(y);
+      if (mapX < 0 || mapY < 0 || mapX >= state.mapWidth || mapY >= state.mapHeight) return '#';
+      return state.currentMap[mapY][mapX];
+    }
+
+    function wallColorByCell(cell) {
+      const palette = {
+        '#': '#2c3b59',
+        'D': '#7e5638',
+        'K': '#ffd166',
+        'E': '#5ef2a5'
+      };
+      return palette[cell] || '#b8d4ff';
+    }
+
+    function movePlayer(dx, dy) {
+      const nextX = state.player.x + dx;
+      const nextY = state.player.y + dy;
+      const margin = 0.18;
+
+      const testX = state.player.x + dx * 0.18;
+      const testY = state.player.y + dy * 0.18;
+
+      const a = isWall(testX, state.player.y);
+      const b = isWall(state.player.x, testY);
+
+      if (!a && !b) {
+        state.player.x = nextX;
+        state.player.y = nextY;
+      } else {
+        if (!isWall(nextX, state.player.y)) state.player.x = nextX;
+        if (!isWall(state.player.x, nextY)) state.player.y = nextY;
+      }
+
+      const key = getCell(state.player.x, state.player.y);
+      if (key === 'K') {
+        state.keys += 1;
+        state.currentMap[Math.floor(state.player.y)][Math.floor(state.player.x)] = '.';
+        showMessage("Key collected!", 1200);
+      }
+
+      if (Math.round(state.player.x) === Math.round(state.exit.x) && Math.round(state.player.y) === Math.round(state.exit.y)) {
+        if (state.keys > 0) {
+          showMessage("Exit unlocked! Next level.", 1600);
+          setTimeout(() => {
+            loadLevel((state.levelIndex + 1) % levels.length);
+          }, 800);
+        } else {
+          showMessage("Need a key to open the exit.", 1200);
+        }
+      }
+    }
+
+    function turnPlayer(dir) {
+      state.player.angle += dir * 0.08;
+    }
+
+    function handleInput(dt) {
+      let moveX = 0;
+      let moveY = 0;
+
+      if (pressed.has('forward')) { moveX += Math.cos(state.player.angle) * 0.06; moveY += Math.sin(state.player.angle) * 0.06; }
+      if (pressed.has('backward')) { moveX -= Math.cos(state.player.angle) * 0.06; moveY -= Math.sin(state.player.angle) * 0.06; }
+      if (pressed.has('left')) { moveX += Math.cos(state.player.angle - Math.PI / 2) * 0.06; moveY += Math.sin(state.player.angle - Math.PI / 2) * 0.06; }
+      if (pressed.has('right')) { moveX += Math.cos(state.player.angle + Math.PI / 2) * 0.06; moveY += Math.sin(state.player.angle + Math.PI / 2) * 0.06; }
+
+      if (pressed.has('turnLeft')) state.player.angle -= 0.08;
+      if (pressed.has('turnRight')) state.player.angle += 0.08;
+
+      if (moveX || moveY) {
+        const speed = state.runMode ? 0.09 : 0.06;
+        const dx = moveX * speed * (dt * 60);
+        const dy = moveY * speed * (dt * 60);
+        movePlayer(dx, dy);
+      }
+
+      if (state.showMessageTimer && performance.now() > state.showMessageTimer) {
+        messageBox.classList.remove('show');
+      }
+    }
+
+    function castRay(rayAngle, maxDepth = 18) {
+      let distance = 0;
+      let hitWall = false;
+      const sinA = Math.sin(rayAngle);
+      const cosA = Math.cos(rayAngle);
+
+      while (!hitWall && distance < maxDepth) {
+        distance += 0.02;
+        const x = state.player.x + cosA * distance;
+        const y = state.player.y + sinA * distance;
+        const cell = getCell(x, y);
+        if (cell === '#' || cell === 'D' || cell === 'E') {
+          hitWall = true;
+        }
+      }
+
+      return distance;
+    }
+
+    function drawSkyAndGround() {
+      const w = canvas.width / window.devicePixelRatio;
+      const h = canvas.height / window.devicePixelRatio;
+      const sky = ctx.createLinearGradient(0, 0, 0, h * 0.55);
+      sky.addColorStop(0, '#0c1426');
+      sky.addColorStop(1, '#2d405c');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, w, h * 0.55);
+
+      const floor = ctx.createLinearGradient(0, h * 0.55, 0, h);
+      floor.addColorStop(0, '#1e222e');
+      floor.addColorStop(1, '#090d16');
+      ctx.fillStyle = floor;
+      ctx.fillRect(0, h * 0.55, w, h * 0.45);
+    }
+
+    function drawWorld() {
+      const w = canvas.width / window.devicePixelRatio;
+      const h = canvas.height / window.devicePixelRatio;
+
+      drawSkyAndGround();
+
+      const fov = Math.PI / 3;
+      const rayCount = 180;
+      const sliceWidth = w / rayCount;
+
+      for (let i = 0; i < rayCount; i++) {
+        const angle = state.player.angle - fov / 2 + (i / rayCount) * fov;
+        const distance = castRay(angle, 18);
+        const corrected = distance * Math.cos(angle - state.player.angle);
+        const wallHeight = (h / corrected) * 0.9;
+
+        const y1 = h / 2 - wallHeight / 2;
+        const y2 = h / 2 + wallHeight / 2;
+
+        const shade = Math.max(0.12, 1 - distance / 18);
+        const r = Math.floor(110 * shade);
+        const g = Math.floor(140 * shade + 20);
+        const b = Math.floor(170 * shade + 20);
+
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.fillRect(i * sliceWidth, y1, sliceWidth + 1, y2 - y1);
+      }
+
+      // Floor markings
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.beginPath();
+      ctx.moveTo(0, h / 2);
+      ctx.lineTo(w, h / 2);
+      ctx.stroke();
+
+      // Mini map
+      const miniSize = 120;
+      const miniX = w - miniSize - 18;
+      const miniY = 18;
+      const tile = miniSize / Math.max(state.mapWidth, state.mapHeight);
+
+      ctx.fillStyle = 'rgba(10, 13, 20, 0.7)';
+      ctx.fillRect(miniX, miniY, miniSize, miniSize);
+
+      for (let y = 0; y < state.mapHeight; y++) {
+        for (let x = 0; x < state.mapWidth; x++) {
+          const cell = state.currentMap[y][x];
+          if (cell === '#') {
+            ctx.fillStyle = 'rgba(160, 180, 220, 0.6)';
+            ctx.fillRect(miniX + x * tile, miniY + y * tile, tile, tile);
+          } else if (cell === 'K') {
+            ctx.fillStyle = '#ffd166';
+            ctx.fillRect(miniX + x * tile + tile * 0.2, miniY + y * tile + tile * 0.2, tile * 0.6, tile * 0.6);
+          } else if (cell === 'E') {
+            ctx.fillStyle = '#7ef29a';
+            ctx.fillRect(miniX + x * tile + tile * 0.2, miniY + y * tile + tile * 0.2, tile * 0.6, tile * 0.6);
+          }
+        }
+      }
+
+      ctx.fillStyle = '#ff5d73';
+      ctx.fillRect(miniX + state.player.x * tile - 2, miniY + state.player.y * tile - 2, 4, 4);
+
+      // Enemy
+      ctx.fillStyle = '#ff7a59';
+      ctx.fillRect(miniX + state.enemy.x * tile - 3, miniY + state.enemy.y * tile - 3, 6, 6);
+    }
+
+    function updateEnemy(dt) {
+      const dx = state.player.x - state.enemy.x;
+      const dy = state.player.y - state.enemy.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist < 4) {
+        state.enemy.x += (dx / dist) * state.enemy.speed * dt;
+        state.enemy.y += (dy / dist) * state.enemy.speed * dt;
+      } else {
+        state.enemy.phase += dt;
+        const sway = Math.sin(state.enemy.phase * 2.5) * 0.8;
+        state.enemy.x += Math.cos(state.enemy.phase) * state.enemy.speed * 0.14 * dt;
+        state.enemy.y += Math.sin(state.enemy.phase * 1.3) * state.enemy.speed * 0.14 * dt;
+      }
+
+      if (Math.hypot(state.player.x - state.enemy.x, state.player.y - state.enemy.y) < 0.65) {
+        if (messageBox.classList.contains('show')) {
+          // do nothing, message already visible
+        }
+        showMessage("You got caught! Try again.", 1400);
+        setTimeout(() => {
+          loadLevel(state.levelIndex);
+        }, 700);
+      }
+    }
+
+    function update(dt) {
+      handleInput(dt);
+      updateEnemy(dt);
+      drawWorld();
+      keysLabel.textContent = `Keys: ${state.keys}`;
+    }
+
+    function loop(timestamp) {
+      const dt = Math.min((timestamp - state.lastTime) / 1000 || 0.016, 0.033);
+      state.lastTime = timestamp;
+      update(dt);
+      requestAnimationFrame(loop);
+    }
+
+    function handleKey(e, isDown) {
+      const key = (e.key || '').toLowerCase();
+      const mapped = keyMap[key] || keyMap[e.key];
+      if (!mapped) return;
+
+      if (isDown) {
+        pressed.add(mapped);
+      } else {
+        pressed.delete(mapped);
+      }
+      if (mapped === 'interact') {
+        if (isDown) {
+          if (state.keys > 0 && Math.abs(state.player.x - state.exit.x) < 1.2 && Math.abs(state.player.y - state.exit.y) < 1.2) {
+            showMessage("Exit unlocked!", 1200);
+            setTimeout(() => {
+              loadLevel((state.levelIndex + 1) % levels.length);
+            }, 500);
+          } else {
+            showMessage("Search for a key first.", 1100);
+          }
+        }
+      }
+      e.preventDefault();
+    }
+
+    document.addEventListener('keydown', (e) => handleKey(e, true));
+    document.addEventListener('keyup', (e) => handleKey(e, false));
+
+    // Mobile controls
+    let padState = { active: false, x: 0, y: 0 };
+    pad.addEventListener('pointerdown', (e) => {
+      padState.active = true;
+      updatePad(e);
+      pad.setPointerCapture(e.pointerId);
+    });
+    pad.addEventListener('pointermove', (e) => {
+      if (padState.active) updatePad(e);
+    });
+    pad.addEventListener('pointerup', () => {
+      padState.active = false;
+      padState.x = 0; padState.y = 0;
+      stick.style.transform = 'translate(-50%, -50%)';
+      pressed.clear();
+    });
+    pad.addEventListener('pointerleave', () => {
+      padState.active = false;
+      padState.x = 0; padState.y = 0;
+      stick.style.transform = 'translate(-50%, -50%)';
+      pressed.clear();
+    });
+
+    function updatePad(e) {
+      const rect = pad.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dx = e.clientX - cx;
+      const dy = e.clientY - cy;
+      const length = Math.min(38, Math.hypot(dx, dy));
+      const angle = Math.atan2(dy, dx);
+      const x = Math.cos(angle) * length;
+      const y = Math.sin(angle) * length;
+
+      padState.x = x;
+      padState.y = y;
+      stick.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+
+      const dead = 10;
+      pressed.clear();
+      if (Math.abs(y) > dead || Math.abs(x) > dead) {
+        if (Math.abs(x) > Math.abs(y)) {
+          if (x > 0) pressed.add('right');
+          if (x < 0) pressed.add('left');
+        } else {
+          if (y < 0) pressed.add('forward');
+          if (y > 0) pressed.add('backward');
+        }
+      }
+    }
+
+    interactButton.addEventListener('pointerdown', () => {
+      pressed.add('interact');
+      // simple trigger once
+      if (state.keys > 0 && Math.abs(state.player.x - state.exit.x) < 1.2 && Math.abs(state.player.y - state.exit.y) < 1.2) {
+        showMessage("Exit unlocked!", 1200);
+        setTimeout(() => {
+          loadLevel((state.levelIndex + 1) % levels.length);
+        }, 500);
+      } else {
+        showMessage("Search for a key first.", 1100);
+      }
+    });
+
+    runButton.addEventListener('pointerdown', () => {
+      state.runMode = !state.runMode;
+      showMessage(state.runMode ? "Running mode ON" : "Running mode OFF", 700);
+    });
+
+    restartButton.addEventListener('pointerdown', () => {
+      loadLevel(state.levelIndex);
+    });
+
+    // Kickoff
+    window.addEventListener('resize', resizeCanvas);
+    loadLevel(0);
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
