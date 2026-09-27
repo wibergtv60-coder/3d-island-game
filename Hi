@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ohio Tools 3D</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #87ceeb;
+      font-family: Arial, sans-serif;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #hud {
+      position: fixed;
+      z-index: 5;
+      top: 15px;
+      left: 15px;
+      color: white;
+      background: rgba(0, 0, 0, 0.55);
+      padding: 12px;
+      border-radius: 10px;
+      min-width: 230px;
+      user-select: none;
+    }
+
+    #healthBar {
+      width: 200px;
+      height: 18px;
+      background: #441111;
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 6px 0 12px;
+    }
+
+    #healthFill {
+      width: 100%;
+      height: 100%;
+      background: #27d34d;
+      transition: width 0.15s;
+    }
+
+    .slot {
+      padding: 7px;
+      margin-top: 5px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .selected {
+      outline: 3px solid #ffe600;
+      background: rgba(255, 230, 0, 0.25);
+    }
+
+    #help {
+      position: fixed;
+      z-index: 5;
+      right: 15px;
+      top: 15px;
+      color: white;
+      background: rgba(0, 0, 0, 0.55);
+      padding: 10px;
+      border-radius: 8px;
+      text-align: right;
+      user-select: none;
+    }
+
+    #startScreen {
+      position: fixed;
+      z-index: 10;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.35);
+      cursor: pointer;
+    }
+
+    #startBox {
+      background: rgba(0, 0, 0, 0.75);
+      padding: 30px;
+      border-radius: 15px;
+    }
+
+    #message {
+      position: fixed;
+      z-index: 6;
+      left: 50%;
+      top: 18%;
+      transform: translateX(-50%);
+      color: white;
+      font-size: 25px;
+      font-weight: bold;
+      text-shadow: 2px 2px 5px black;
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="hud">
+    <b>OHIO TOOLS</b>
+    <div>Health: <span id="healthText">100</span></div>
+    <div id="healthBar">
+      <div id="healthFill"></div>
+    </div>
+
+    <div id="slot0" class="slot">1: <span></span></div>
+    <div id="slot1" class="slot">2: <span></span></div>
+  </div>
+
+  <div id="help">
+    Click to play<br>
+    WASD: Move<br>
+    Mouse: Look<br>
+    1 / 2: Select tool<br>
+    Left click: Use tool
+  </div>
+
+  <div id="message">Click to start</div>
+
+  <div id="startScreen">
+    <div id="startBox">
+      <h1>Ohio Tools</h1>
+      <p>Fight the NPCs and survive the map.</p>
+      <p><b>Click to start</b></p>
+    </div>
+  </div>
+
+  <!-- This keeps the entire game in one HTML file. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.158.0/build/three.module.js"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { PointerLockControls } from
+      "https://unpkg.com/three@0.158.0/examples/jsm/controls/PointerLockControls.js";
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+    scene.fog = new THREE.Fog(0x87ceeb, 100, 260);
+
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      innerWidth / innerHeight,
+      0.1,
+      500
+    );
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new PointerLockControls(camera, renderer.domElement);
+
+    const startScreen = document.getElementById("startScreen");
+    const message = document.getElementById("message");
+
+    startScreen.addEventListener("click", () => controls.lock());
+
+    controls.addEventListener("lock", () => {
+      startScreen.style.display = "none";
+      message.style.display = "none";
+    });
+
+    controls.addEventListener("unlock", () => {
+      startScreen.style.display = "flex";
+      message.textContent = "Click to continue";
+      message.style.display = "block";
+    });
+
+    // Lighting
+    scene.add(new THREE.HemisphereLight(0xbfeaff, 0x385020, 2));
+
+    const sun = new THREE.DirectionalLight(0xffffff, 2);
+    sun.position.set(50, 100, 30);
+    sun.castShadow = true;
+    scene.add(sun);
+
+    // Materials and helpers
+    function material(color) {
+      return new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.8
+      });
+    }
+
+    function box(color, x, y, z) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(x, y, z),
+        material(color)
+      );
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    function cylinder(color, radius, height) {
+      const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius, radius, height, 16),
+        material(color)
+      );
+      mesh.castShadow = true;
+      return mesh;
+    }
+
+    // Map
+    const MAP_SIZE = 180;
+    const HALF_MAP = MAP_SIZE / 2;
+
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(MAP_SIZE, MAP_SIZE),
+      material(0x398844)
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const wallHeight = 8;
+    const wallColor = 0x6b4226;
+
+    const northWall = box(wallColor, MAP_SIZE, wallHeight, 3);
+    northWall.position.set(0, wallHeight / 2, -HALF_MAP);
+    scene.add(northWall);
+
+    const southWall = box(wallColor, MAP_SIZE, wallHeight, 3);
+    southWall.position.set(0, wallHeight / 2, HALF_MAP);
+    scene.add(southWall);
+
+    const westWall = box(wallColor, 3, wallHeight, MAP_SIZE);
+    westWall.position.set(-HALF_MAP, wallHeight / 2, 0);
+    scene.add(westWall);
+
+    const eastWall = box(wallColor, 3, wallHeight, MAP_SIZE);
+    eastWall.position.set(HALF_MAP, wallHeight / 2, 0);
+    scene.add(eastWall);
+
+    // Houses
+    for (let i = 0; i < 18; i++) {
+      const house = box(0xa95132, 8, 7, 8);
+      const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(6.5, 4, 4),
+        material(0x54231d)
+      );
+
+      const angle = (i / 18) * Math.PI * 2;
+      const radius = 62 + (i % 2) * 9;
+
+      house.position.set(
+        Math.cos(angle) * radius,
+        3.5,
+        Math.sin(angle) * radius
+      );
+
+      roof.position.set(house.position.x, 9, house.position.z);
+      roof.rotation.y = Math.PI / 4;
+
+      scene.add(house, roof);
+    }
+
+    // Tools
+    const TOOL_NAMES = [
+      "Hug Spoon",
+      "Train Airstrike",
+      "🗿 Moai",
+      "Fizza Gun"
+    ];
+
+    function randomTool() {
+      return TOOL_NAMES[Math.floor(Math.random() * TOOL_NAMES.length)];
+    }
+
+    function randomInventory() {
+      return [randomTool(), randomTool()];
+    }
+
+    // Player
+    const player = {
+      mesh: box(0x246bdb, 1.5, 2.4, 1.5),
+      position: new THREE.Vector3(0, 1.2, 0),
+      health: 100,
+      inventory: randomInventory(),
+      selected: 0,
+      alive: true
+    };
+
+    player.mesh.position.copy(player.position);
+    scene.add(player.mesh);
+
+    const keys = {};
+    const npcs = [];
+    const effects = [];
+
+    window.addEventListener("keydown", event => {
+      keys[event.key.toLowerCase()] = true;
+
+      if (event.key === "1") {
+        player.selected = 0;
+        updateHUD();
+      }
+
+      if (event.key === "2") {
+        player.selected = 1;
+        updateHUD();
+      }
+    });
+
+    window.addEventListener("keyup", event => {
+      keys[event.key.toLowerCase()] = false;
+    });
+
+    function updateHUD() {
+      document.getElementById("healthText").textContent =
+        Math.max(0, Math.round(player.health));
+
+      document.getElementById("healthFill").style.width =
+        Math.max(0, player.health) + "%";
+
+      document.querySelector("#slot0 span").textContent =
+        player.inventory[0];
+
+      document.querySelector("#slot1 span").textContent =
+        player.inventory[1];
+
+      document.getElementById("slot0").classList.toggle(
+        "selected",
+        player.selected === 0
+      );
+
+      document.getElementById("slot1").classList.toggle(
+        "selected",
+        player.selected === 1
+      );
+    }
+
+    function flashMessage(text, duration = 800) {
+      message.textContent = text;
+      message.style.display = "block";
+
+      setTimeout(() => {
+        if (controls.isLocked) {
+          message.style.display = "none";
+        }
+      }, duration);
+    }
+
+    function damageNPC(npc, amount) {
+      if (!npc.alive) return;
+
+      npc.health -= amount;
+      npc.mesh.material.emissive.setHex(0xff0000);
+
+      setTimeout(() => {
+        if (npc.mesh.material) {
+          npc.mesh.material.emissive.setHex(0x000000);
+        }
+      }, 100);
+
+      if (npc.health <= 0) {
+        npc.alive = false;
+        scene.remove(npc.mesh);
+        flashMessage("NPC defeated!");
+      }
+    }
+
+    function damagePlayer(amount) {
+      if (!player.alive) return;
+
+      player.health -= amount;
+      updateHUD();
+
+      if (player.health <= 0) {
+        player.alive = false;
+        flashMessage("You died!", 1200);
+
+        setTimeout(() => {
+          player.health = 100;
+          player.inventory = randomInventory();
+          player.position.set(0, 1.2, 0);
+          player.mesh.position.copy(player.position);
+          player.alive = true;
+          updateHUD();
+          flashMessage("You respawned with new tools!", 1500);
+        }, 1500);
+      }
+    }
+
+    function distance(a, b) {
+      return a.position.distanceTo(b.position);
+    }
+
+    function spawnExplosion(position, color = 0xffaa00, size = 5) {
+      const explosion = new THREE.Mesh(
+        new THREE.SphereGeometry(size, 16, 16),
+        new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.7
+        })
+      );
+
+      explosion.position.copy(position);
+      scene.add(explosion);
+
+      effects.push({
+        mesh: explosion,
+        life: 0.35
+      });
+    }
+
+    function useTool(user, tool) {
+      if (!tool) return;
+
+      if (tool === "Hug Spoon") {
+        const reach = 4;
+
+        if (user === player) {
+          for (const npc of npcs) {
+            if (npc.alive && distance(player, npc) < reach) {
+              damageNPC(npc, 28);
+            }
+          }
+
+          flashMessage("HUG SPOON!");
+        } else if (distance(user, player) < reach) {
+          damagePlayer(18);
+        }
+
+        return;
+      }
+
+      if (tool === "Fizza Gun") {
+        const direction = new THREE.Vector3();
+
+        if (user === player) {
+          camera.getWorldDirection(direction);
+        } else {
+          direction.copy(player.position).sub(user.position).normalize();
+        }
+
+        const pizza = cylinder(0xff9d18, 0.35, 0.8);
+        pizza.rotation.z = Math.PI / 2;
+        pizza.position.copy(user.position);
+        pizza.position.y += 0.7;
+        scene.add(pizza);
+
+        const shot = {
+          mesh: pizza,
+          velocity: direction.multiplyScalar(30),
+          owner: user,
+          life: 3
+        };
+
+        effects.push(shot);
+        return;
+      }
+
+      if (tool === "Train Airstrike") {
+        const target = user === player
+          ? player.position.clone().add(
+              new THREE.Vector3(
+                (Math.random() - 0.5) * 20,
+                0,
+                (Math.random() - 0.5) * 20
+              )
+            )
+          : player.position.clone();
+
+        const train = box(0x252525, 7, 3, 3);
+        train.position.set(target.x, 60, target.z);
+        scene.add(train);
+
+        effects.push({
+          mesh: train,
+          type: "train",
+          target,
+          owner: user,
+          life: 5
+        });
+
+        if (user === player) flashMessage("TRAIN AIRSTRIKE!");
+        return;
+      }
+
+      if (tool === "🗿 Moai") {
+        const statue = cylinder(0x888888, 1.3, 3);
+        statue.position.copy(user.position);
+        statue.position.y = 1.5;
+        scene.add(statue);
+
+        effects.push({
+          mesh: statue,
+          type: "moai",
+          owner: user,
+          life: 8
+        });
+
+        if (user === player) flashMessage("🗿 MOAI ATTACK!");
+      }
+    }
+
+    window.addEventListener("mousedown", event => {
+      if (!controls.isLocked || event.button !== 0 || !player.alive) return;
+      useTool(player, player.inventory[player.selected]);
+    });
+
+    // NPCs
+    function spawnNPC(angle) {
+      const npc = {
+        mesh: box(0xd63b3b, 1.5, 2.4, 1.5),
+        position: new THREE.Vector3(
+          Math.cos(angle) * 70,
+          1.2,
+          Math.sin(angle) * 70
+        ),
+        health: 100,
+        speed: 2 + Math.random() * 1.5,
+        inventory: randomInventory(),
+        selected: 0,
+        alive: true,
+        cooldown: Math.random()
+      };
+
+      npc.mesh.position.copy(npc.position);
+      scene.add(npc.mesh);
+      npcs.push(npc);
+    }
+
+    for (let i = 0; i < 12; i++) {
+      spawnNPC((i / 12) * Math.PI * 2);
+    }
+
+    function updatePlayer(delta) {
+      if (!player.alive) return;
+
+      const forward = new THREE.Vector3();
+      camera.getWorldDirection(forward);
+      forward.y = 0;
+      forward.normalize();
+
+      const right = new THREE.Vector3()
+        .crossVectors(forward, new THREE.Vector3(0, 1, 0))
+        .normalize();
+
+      const movement = new THREE.Vector3();
+
+      if (keys["w"]) movement.add(forward);
+      if (keys["s"]) movement.sub(forward);
+      if (keys["d"]) movement.add(right);
+      if (keys["a"]) movement.sub(right);
+
+      if (movement.length() > 0) {
+        movement.normalize();
+        player.position.addScaledVector(movement, delta * 10);
+      }
+
+      player.position.x = THREE.MathUtils.clamp(
+        player.position.x,
+        -HALF_MAP + 5,
+        HALF_MAP - 5
+      );
+
+      player.position.z = THREE.MathUtils.clamp(
+        player.position.z,
+        -HALF_MAP + 5,
+        HALF_MAP - 5
+      );
+
+      player.mesh.position.copy(player.position);
+      camera.position.set(
+        player.position.x,
+        player.position.y + 1.4,
+        player.position.z
+      );
+    }
+
+    function updateNPCs(delta) {
+      for (const npc of npcs) {
+        if (!npc.alive) continue;
+
+        npc.cooldown -= delta;
+
+        const target = player.position;
+        const direction = target.clone().sub(npc.position);
+        direction.y = 0;
+
+        const distanceToPlayer = direction.length();
+
+        if (distanceToPlayer < 38) {
+          direction.normalize();
+          npc.position.addScaledVector(
+            direction,
+            delta * npc.speed
+          );
+
+          npc.mesh.lookAt(player.position);
+
+          if (distanceToPlayer < 3 && npc.cooldown <= 0) {
+            useTool(npc, npc.inventory[npc.selected]);
+            npc.cooldown = 1.2 + Math.random() * 2;
+          }
+        } else {
+          // Walk around the outside of the map.
+          const angle = performance.now() * 0.00015 + npcs.indexOf(npc);
+          const patrolPoint = new THREE.Vector3(
+            Math.cos(angle) * 72,
+            1.2,
+            Math.sin(angle) * 72
+          );
+
+          const patrolDirection = patrolPoint.sub(npc.position);
+          patrolDirection.y = 0;
+
+          if (patrolDirection.length() > 2) {
+            patrolDirection.normalize();
+            npc.position.addScaledVector(
+              patrolDirection,
+              delta * npc.speed
+            );
+          }
+        }
+
+        npc.position.x = THREE.MathUtils.clamp(
+          npc.position.x,
+          -HALF_MAP + 5,
+          HALF_MAP - 5
+        );
+
+        npc.position.z = THREE.MathUtils.clamp(
+          npc.position.z,
+          -HALF_MAP + 5,
+          HALF_MAP - 5
+        );
+
+        npc.mesh.position.copy(npc.position);
+      }
+    }
+
+    function updateEffects(delta) {
+      for (let i = effects.length - 1; i >= 0; i--) {
+        const effect = effects[i];
+
+        effect.life -= delta;
+
+        if (effect.type === "train") {
+          effect.mesh.position.y -= delta * 45;
+
+          if (effect.mesh.position.y <= 2) {
+            const impact = effect.mesh.position.clone();
+            spawnExplosion(impact, 0xff5500, 7);
+
+            if (distance({ position: impact }, player) < 9) {
+              damagePlayer(45);
+            }
+
+            for (const npc of npcs) {
+              if (npc.alive && distance({ position: impact }, npc) < 9) {
+                damageNPC(npc, 45);
+              }
+            }
+
+            scene.remove(effect.mesh);
+            effects.splice(i, 1);
+            continue;
+          }
+        }
+
+        if (effect.type === "moai") {
+          const target = effect.owner === player
+            ? npcs.find(npc => npc.alive)
+            : player;
+
+          if (target) {
+            const direction = target.position
+              .clone()
+              .sub(effect.mesh.position);
+
+            direction.y = 0;
+
+            if (direction.length() > 0.1) {
+              direction.normalize();
+              effect.mesh.position.addScaledVector(
+                direction,
+                delta * 8
+              );
+            }
+
+            if (effect.mesh.position.distanceTo(target.position) < 2.5) {
+              if (target === player) {
+                damagePlayer(25);
+              } else {
+                damageNPC(target, 25);
+              }
+
+              effect.life = 0;
+            }
+          }
+        }
+
+        if (!effect.type && effect.velocity) {
+          effect.mesh.position.addScaledVector(
+            effect.velocity,
+            delta
+          );
+
+          if (effect.owner === player) {
+            for (const npc of npcs) {
+              if (
+                npc.alive &&
+                effect.mesh.position.distanceTo(npc.position) < 2
+              ) {
+                damageNPC(npc, 30);
+                effect.life = 0;
+              }
+            }
+          } else if (
+            effect.mesh.position.distanceTo(player.position) < 2
+          ) {
+            damagePlayer(20);
+            effect.life = 0;
+          }
+        }
+
+        if (effect.life <= 0) {
+          scene.remove(effect.mesh);
+          effects.splice(i, 1);
+        }
+      }
+    }
+
+    updateHUD();
+
+    let previousTime = performance.now();
+
+    function animate(currentTime) {
+      requestAnimationFrame(animate);
+
+      const delta = Math.min(
+        (currentTime - previousTime) / 1000,
+        0.05
+      );
+
+      previousTime = currentTime;
+
+      updatePlayer(delta);
+      updateNPCs(delta);
+      updateEffects(delta);
+
+      renderer.render(scene, camera);
+    }
+
+    animate(performance.now());
+
+    window.addEventListener("resize", () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html> as
