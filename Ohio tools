@@ -1,0 +1,528 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Ohio Tools — 3D Game</title>
+  <style>
+    body { margin:0; overflow:hidden; font-family: Arial, Helvetica, sans-serif; background:#111 }
+    #hud {
+      position: absolute; left: 12px; top: 12px; color: #fff;
+      background: rgba(0,0,0,0.35); padding:10px; border-radius:6px;
+    }
+    .slot { display:inline-block; width:140px; height:40px; margin-right:6px;
+      background: rgba(255,255,255,0.06); border-radius:6px; padding:6px;
+      vertical-align:middle; color:#fff; font-size:13px;
+    }
+    #health { margin-bottom:8px; font-weight:600; }
+    #message { position: absolute; left: 50%; top: 10%; transform: translateX(-50%); color:#fff; font-size:20px; text-shadow:0 0 8px #000; }
+    canvas { display:block; }
+    #controlsHint { position: absolute; right: 12px; top: 12px; color: #ddd; background: rgba(0,0,0,0.35); padding:8px; border-radius:6px; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div id="health">Health: <span id="hp">100</span></div>
+    <div>
+      <div class="slot" id="slot0">1: <span id="tool0">—</span></div>
+      <div class="slot" id="slot1">2: <span id="tool1">—</span></div>
+    </div>
+  </div>
+  <div id="controlsHint">WASD = move • Mouse = look • Click = use tool • 1/2 = switch slot</div>
+  <div id="message">Click to start (pointer lock)</div>
+
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.158.0/build/three.module.js';
+import { PointerLockControls } from 'https://unpkg.com/three@0.158.0/examples/jsm/controls/PointerLockControls.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+camera.position.set(0, 2, 5);
+
+const controls = new PointerLockControls(camera, renderer.domElement);
+document.body.addEventListener('click', () => {
+  if (!controls.isLocked) {
+    controls.lock();
+  }
+});
+controls.addEventListener('lock', () => { document.getElementById('message').style.display='none' });
+controls.addEventListener('unlock', () => { document.getElementById('message').style.display='block' });
+
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(5,10,7);
+scene.add(light);
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+
+const MAP_SIZE = 200;
+const WALL_HEIGHT = 6;
+
+// ground
+const groundGeo = new THREE.PlaneGeometry(MAP_SIZE, MAP_SIZE);
+const groundMat = new THREE.MeshPhongMaterial({ color:0x3a8a3a });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+
+// walls
+const wallMat = new THREE.MeshPhongMaterial({ color:0x6b4f2b });
+const wallThickness = 2;
+const wallLength = MAP_SIZE;
+const walls = new THREE.Group();
+const wallGeom = new THREE.BoxGeometry(wallLength, WALL_HEIGHT, wallThickness);
+const wall1 = new THREE.Mesh(wallGeom, wallMat); wall1.position.set(0, WALL_HEIGHT/2, -MAP_SIZE/2);
+const wall2 = new THREE.Mesh(wallGeom, wallMat); wall2.position.set(0, WALL_HEIGHT/2, MAP_SIZE/2);
+const sideGeom = new THREE.BoxGeometry(wallThickness, WALL_HEIGHT, wallLength);
+const wall3 = new THREE.Mesh(sideGeom, wallMat); wall3.position.set(-MAP_SIZE/2, WALL_HEIGHT/2, 0);
+const wall4 = new THREE.Mesh(sideGeom, wallMat); wall4.position.set(MAP_SIZE/2, WALL_HEIGHT/2, 0);
+walls.add(wall1, wall2, wall3, wall4);
+scene.add(walls);
+
+// houses along walls
+const houseGroup = new THREE.Group();
+const houseMat = new THREE.MeshStandardMaterial({ color: 0xa0522d });
+for (let i=0;i<20;i++){
+  const box = new THREE.Mesh(new THREE.BoxGeometry(6,6,6), houseMat);
+  // distribute along perimeter
+  const side = i % 4;
+  const t = Math.floor(i/4);
+  const spacing = (MAP_SIZE - 40)/5;
+  let x=0,z=0;
+  if (side===0){ x = -MAP_SIZE/2 + 10 + t*spacing; z = -MAP_SIZE/2 + 6; }
+  if (side===1){ x = MAP_SIZE/2 - 6; z = -MAP_SIZE/2 + 10 + t*spacing; }
+  if (side===2){ x = -MAP_SIZE/2 + 10 + t*spacing; z = MAP_SIZE/2 - 6; }
+  if (side===3){ x = -MAP_SIZE/2 + 6; z = -MAP_SIZE/2 + 10 + t*spacing; }
+  box.position.set(x,3,z);
+  box.rotation.y = Math.random()*Math.PI;
+  houseGroup.add(box);
+}
+scene.add(houseGroup);
+
+// helper: make simple colored box
+function makeBox(color, sx=1, sy=1, sz=1){
+  return new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz), new THREE.MeshStandardMaterial({ color }));
+}
+
+// game entities
+const player = {
+  mesh: makeBox(0x3366ff, 1,2,1),
+  velocity: new THREE.Vector3(),
+  speed: 6,
+  health: 100,
+  inventory: [null,null],
+  selectedSlot: 0,
+  alive: true,
+  respawn() {
+    this.mesh.position.set(0,1,0);
+    this.health = 100;
+    this.alive = true;
+    assignRandomTools(this);
+    updateHUD();
+  }
+};
+player.mesh.position.set(0,1,0);
+scene.add(player.mesh);
+
+// HUD update
+function updateHUD(){
+  document.getElementById('hp').textContent = Math.max(0, Math.round(player.health));
+  document.getElementById('tool0').textContent = player.inventory[0] ? player.inventory[0].name : '—';
+  document.getElementById('tool1').textContent = player.inventory[1] ? player.inventory[1].name : '—';
+  // highlight selection
+  document.getElementById('slot0').style.boxShadow = player.selectedSlot===0 ? '0 0 8px #00f' : 'none';
+  document.getElementById('slot1').style.boxShadow = player.selectedSlot===1 ? '0 0 8px #00f' : 'none';
+}
+
+// Tools definitions
+const ToolType = {
+  SPOON: 'Hug Spoon',
+  TRAIN: 'Train Airstrike',
+  MOAI: '🗿 Moai',
+  PIZZA: 'Fizza Gun'
+};
+
+let projectiles = [];
+let entities = []; // NPCs and moai trains, etc.
+
+function assignRandomTools(entity){
+  entity.inventory = [randomTool(), randomTool()];
+}
+function randomTool(){
+  const list = [ToolType.SPOON, ToolType.TRAIN, ToolType.MOAI, ToolType.PIZZA];
+  const name = list[Math.floor(Math.random()*list.length)];
+  return { name };
+}
+
+// tool usage behavior
+function useTool(user, tool){
+  if (!tool) return;
+  switch(tool.name){
+    case ToolType.SPOON:
+      // melee: create short range slice that hits close entities
+      doMelee(user, 10, 2.5);
+      break;
+    case ToolType.TRAIN:
+      doTrainAirstrike(user, 25);
+      break;
+    case ToolType.MOAI:
+      spawnMoai(user, 20);
+      break;
+    case ToolType.PIZZA:
+      firePizza(user, 8, 12);
+      break;
+  }
+}
+
+function doMelee(user, damage, range){
+  // damage all entities within range in front of user (simple distance)
+  const pos = user.mesh.position;
+  entities.forEach(e=>{
+    if (e===user) return;
+    if (!e.alive) return;
+    const d = pos.distanceTo(e.mesh.position);
+    if (d <= range) {
+      e.health -= damage;
+      e.hitFlash && e.hitFlash();
+    }
+  });
+  if (player !== user){
+    // NPC attacked player?
+    if (player.mesh.position.distanceTo(pos) <= range){
+      player.health -= damage;
+      player.hitFlash && player.hitFlash();
+    }
+  } else {
+    // show a quick visual
+    showTempMessage('SPOON SLASH!');
+  }
+}
+
+function doTrainAirstrike(user, damage){
+  // picks a target position in front of the user (or random for NPC)
+  const dir = new THREE.Vector3();
+  user.mesh.getWorldDirection(dir);
+  const target = user.mesh.position.clone().add(dir.multiplyScalar(30 + Math.random()*20));
+  // spawn a falling "train" object high above target
+  const train = makeBox(0x222222, 6,2,3);
+  train.position.copy(target).add(new THREE.Vector3(0,80,0));
+  scene.add(train);
+  const trainObj = {
+    mesh: train, vel: new THREE.Vector3(0, -1.8, 0), tick: (dt)=>{
+      train.position.addScaledVector(trainObj.vel, dt*60);
+      if (train.position.y <= 1.5){
+        // explode
+        explodeAt(train.position, damage, 8);
+        scene.remove(train);
+        trainObj.dead = true;
+      }
+    }, dead:false
+  };
+  entities.push(trainObj);
+}
+
+function explodeAt(pos, damage, radius){
+  // damage nearby entities & player, show flash
+  entities.forEach(e=>{
+    if (!e.mesh) return;
+    const d = pos.distanceTo(e.mesh.position);
+    if (d <= radius){
+      e.health -= damage * (1 - d/radius);
+      e.hitFlash && e.hitFlash();
+    }
+  });
+  if (player.mesh){
+    const d = pos.distanceTo(player.mesh.position);
+    if (d <= radius){
+      player.health -= damage * (1 - d/radius);
+      player.hitFlash && player.hitFlash();
+    }
+  }
+  // quick visual
+  const geo = new THREE.SphereGeometry(radius, 8,8);
+  const mat = new THREE.MeshBasicMaterial({ color:0xffaa33, transparent:true, opacity:0.9 });
+  const s = new THREE.Mesh(geo, mat);
+  s.position.copy(pos);
+  scene.add(s);
+  setTimeout(()=> scene.remove(s), 350);
+}
+
+function spawnMoai(user, damage){
+  // spawn a moving statue that targets nearest enemy
+  const moai = makeBox(0x8b8b80, 2,4,2);
+  moai.position.copy(user.mesh.position).add(new THREE.Vector3(0,2,0));
+  scene.add(moai);
+  const moaiObj = {
+    mesh: moai, vel: new THREE.Vector3(), health: 999, damage: damage,
+    tick: (dt)=>{
+      // find nearest target (player if spawned by NPC else nearest other)
+      let target = null;
+      // if created by NPC, it attacks player primarily; otherwise target nearest enemy
+      target = (Math.random() > 0.1) ? player : nearestEntityTo(moai.position, moaiObj);
+      if (target && target.mesh){
+        const dir = target.mesh.position.clone().sub(moai.position).setY(0).normalize();
+        moai.position.addScaledVector(dir, dt*10);
+        // collision
+        if (moai.position.distanceTo(target.mesh.position) < 1.8){
+          target.health -= moaiObj.damage*dt*2;
+        }
+      }
+    }, dead:false
+  };
+  entities.push(moaiObj);
+}
+
+function firePizza(user, damage, speed){
+  // projectile
+  const proj = makeBox(0xffaa00, 0.8,0.8,0.8);
+  const origin = user.mesh.position.clone().add(new THREE.Vector3(0,1.6,0));
+  proj.position.copy(origin);
+  const dir = new THREE.Vector3();
+  user.mesh.getWorldDirection(dir);
+  const velocity = dir.multiplyScalar(speed);
+  scene.add(proj);
+  const pObj = {
+    mesh: proj, vel: velocity, owner: user,
+    tick: (dt)=>{
+      proj.position.addScaledVector(velocity, dt);
+      // collisions
+      // player vs NPC vs projectiles
+      entities.forEach(e=>{
+        if (!e.mesh || e === user) return;
+        if (proj.position.distanceTo(e.mesh.position) < 1.2){
+          e.health -= damage;
+          e.hitFlash && e.hitFlash();
+          scene.remove(proj); pObj.dead = true;
+        }
+      });
+      if (user !== player && proj.position.distanceTo(player.mesh.position) < 1.2){
+        player.health -= damage;
+        player.hitFlash && player.hitFlash();
+        scene.remove(proj); pObj.dead = true;
+      }
+      if (proj.position.y < -5 || proj.position.length() > 2000){
+        scene.remove(proj); pObj.dead = true;
+      }
+    }, dead:false
+  };
+  projectiles.push(pObj);
+  entities.push(pObj);
+}
+
+// helpers
+function nearestEntityTo(pos, ignore){
+  let best = null; let bd = Infinity;
+  for (const e of npcList){
+    if (!e.alive || e === ignore) continue;
+    const d = pos.distanceTo(e.mesh.position);
+    if (d < bd){ bd = d; best = e; }
+  }
+  // can return player too
+  const dp = pos.distanceTo(player.mesh.position);
+  if (dp < bd) return player;
+  return best;
+}
+
+// NPCs
+const npcList = [];
+function spawnNPC(x,z){
+  const color = 0xff5555 + Math.random()*0x005500;
+  const m = makeBox(color, 1.2,2,1.2);
+  m.position.set(x,1,z);
+  scene.add(m);
+  const npc = {
+    mesh: m,
+    health: 60,
+    speed: 2 + Math.random()*1.6,
+    patrolAngle: Math.random()*Math.PI*2,
+    target: null,
+    inventory: [randomTool(), randomTool()],
+    selectedSlot: 0,
+    alive: true,
+    tick: function(dt){
+      if (!this.alive) return;
+      // simple patrol along perimeter: follow circular path around center at radius
+      const radius = MAP_SIZE/2 - 8;
+      this.patrolAngle += dt * (0.2 + Math.random()*0.6) * (this.speed*0.25);
+      const targetPos = new THREE.Vector3(Math.cos(this.patrolAngle)*radius, 1, Math.sin(this.patrolAngle)*radius);
+      const dir = targetPos.clone().sub(this.mesh.position);
+      dir.y = 0;
+      if (dir.length() > 0.4) {
+        dir.normalize();
+        this.mesh.position.addScaledVector(dir, dt*this.speed);
+        this.mesh.lookAt(targetPos);
+      }
+      // decide target (nearest entity or player)
+      let nearest = player;
+      let nd = this.mesh.position.distanceTo(player.mesh.position);
+      for (const other of npcList){
+        if (other === this || !other.alive) continue;
+        const d = this.mesh.position.distanceTo(other.mesh.position);
+        if (d < nd){ nd = d; nearest = other; }
+      }
+      // if close enough, attack (use current tool)
+      if (nd < 18){
+        // use tool occasionally
+        if (Math.random() < 0.01) {
+          // choose a random slot sometimes
+          if (Math.random() < 0.15) this.selectedSlot = Math.floor(Math.random()*2);
+          const tool = this.inventory[this.selectedSlot];
+          if (tool) useTool(this, tool);
+        }
+        // move toward target if not too close
+        if (nd > 2.5){
+          const chaseDir = nearest.mesh.position.clone().sub(this.mesh.position).setY(0).normalize();
+          this.mesh.position.addScaledVector(chaseDir, dt*(this.speed*1.2));
+        }
+      } else {
+        // occasionally change tool
+        if (Math.random() < 0.002) this.selectedSlot = 1-this.selectedSlot;
+      }
+      // die if health <=0
+      if (this.health <= 0){
+        this.alive = false;
+        scene.remove(this.mesh);
+      }
+    },
+    hitFlash: function(){ const orig = this.mesh.material.color.getHex(); this.mesh.material.emissive = new THREE.Color(0xff0000); setTimeout(()=> this.mesh.material.emissive.setHex(0x000000),120); }
+  };
+  npcList.push(npc);
+  entities.push(npc);
+  return npc;
+}
+
+// spawn a bunch of NPCs along walls
+for (let i=0;i<9;i++){
+  const angle = (i/9) * Math.PI*2;
+  const r = MAP_SIZE/2 - 20;
+  const x = Math.cos(angle)*r + (Math.random()-0.5)*6;
+  const z = Math.sin(angle)*r + (Math.random()-0.5)*6;
+  spawnNPC(x,z);
+}
+
+// player hit flash
+player.hitFlash = function(){ player.mesh.material = player.mesh.material || new THREE.MeshStandardMaterial({ color:0x3366ff }); }
+player.mesh.material = new THREE.MeshStandardMaterial({ color:0x3366ff });
+
+// controls movement
+const keys = {};
+window.addEventListener('keydown', (e)=>{ keys[e.key.toLowerCase()] = true; if (e.key === '1') { player.selectedSlot = 0; updateHUD(); } if (e.key==='2'){ player.selectedSlot=1; updateHUD(); }});
+window.addEventListener('keyup', (e)=>{ keys[e.key.toLowerCase()] = false; });
+
+window.addEventListener('mousedown', (e)=>{
+  if (!controls.isLocked) return;
+  // use selected tool
+  const tool = player.inventory[player.selectedSlot];
+  useTool(player, tool);
+});
+
+// simple collision with ground height
+function updatePlayer(dt){
+  if (!player.alive) return;
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  // movement relative to camera direction (XZ only)
+  const forward = new THREE.Vector3(dir.x,0,dir.z).normalize();
+  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).normalize();
+  let move = new THREE.Vector3();
+  if (keys['w']) move.add(forward);
+  if (keys['s']) move.sub(forward);
+  if (keys['a']) move.sub(right);
+  if (keys['d']) move.add(right);
+  if (move.length() > 0) move.normalize();
+  player.mesh.position.addScaledVector(move, dt * player.speed);
+  // keep inside map
+  player.mesh.position.x = Math.max(-MAP_SIZE/2 + 2, Math.min(MAP_SIZE/2 - 2, player.mesh.position.x));
+  player.mesh.position.z = Math.max(-MAP_SIZE/2 + 2, Math.min(MAP_SIZE/2 - 2, player.mesh.position.z));
+  camera.position.copy(player.mesh.position).add(new THREE.Vector3(0,1.6,0));
+}
+
+// assign initial player tools
+assignRandomTools(player);
+updateHUD();
+
+// show messages
+function showTempMessage(txt, ms=900){
+  const el = document.getElementById('message');
+  el.style.display='block'; el.textContent = txt;
+  setTimeout(()=>{ if (!controls.isLocked) el.style.display='block'; else el.style.display='none'; }, ms);
+}
+
+// main loop
+let last = performance.now();
+function animate(t){
+  const dt = Math.min(0.05, (t-last)/1000);
+  last = t;
+  // update player
+  if (player.alive) updatePlayer(dt);
+  // update projectiles & entities
+  for (let i=entities.length-1;i>=0;i--){
+    const e = entities[i];
+    if (e.tick) {
+      try { e.tick(dt); } catch(err) { /* ignore */ }
+      if (e.health !== undefined && e.health <= 0 && e.alive !== false){
+        e.alive = false;
+        if (e.mesh) scene.remove(e.mesh);
+      }
+    }
+    if (e.dead) {
+      entities.splice(i,1);
+    }
+  }
+  for (let i=projectiles.length-1;i>=0;i--){
+    const p = projectiles[i];
+    if (p.tick) p.tick(dt);
+    if (p.dead) projectiles.splice(i,1);
+  }
+  // NPCs tick
+  for (const n of npcList) {
+    if (n.tick) n.tick(dt);
+  }
+
+  // simple NPC death -> respawn occasionally
+  for (let i=npcList.length-1;i>=0;i--){
+    if (!npcList[i].alive){
+      // remove entry and respawn new NPC after delay
+      const pos = npcList[i].mesh ? npcList[i].mesh.position.clone() : new THREE.Vector3(Math.random()*50-25,0,Math.random()*50-25);
+      npcList.splice(i,1);
+      setTimeout(()=> {
+        const angle = Math.random()*Math.PI*2;
+        const r = MAP_SIZE/2 - 20;
+        const x = Math.cos(angle)*r + (Math.random()-0.5)*6;
+        const z = Math.sin(angle)*r + (Math.random()-0.5)*6;
+        spawnNPC(x,z);
+      }, 2000 + Math.random()*2000);
+    }
+  }
+
+  // check player death & respawn
+  if (player.health <= 0 && player.alive){
+    player.alive = false;
+    showTempMessage('You Died — respawning...');
+    setTimeout(()=> {
+      player.respawn();
+      showTempMessage('You respawned with new tools', 1400);
+    }, 1200);
+  }
+
+  updateHUD();
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+
+// small UI: show selected tool icon on click highlight
+// Also, when player dies: give new tools (done in respawn)
+
+window.addEventListener('resize', ()=>{
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+</script>
+</body>
+</html>
