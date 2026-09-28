@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Tower of Hell - Mobile</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0b1020;
+      color: white;
+      font-family: Arial, Helvetica, sans-serif;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    body {
+      position: relative;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #hud {
+      position: absolute;
+      top: 18px;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 24px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .panel {
+      background: rgba(10, 18, 35, 0.58);
+      border: 1px solid rgba(255,255,255,0.22);
+      border-radius: 12px;
+      padding: 10px 16px;
+      min-width: 140px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      backdrop-filter: blur(8px);
+    }
+
+    .panel.center {
+      flex: 1;
+      max-width: 320px;
+      margin: 0 12px;
+    }
+
+    .label {
+      display: block;
+      font-size: 10px;
+      opacity: 0.7;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 3px;
+    }
+
+    #towerName, #timerText, #statusText {
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      font-size: 14px;
+    }
+
+    #mobileControls {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: auto;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 10px;
+      pointer-events: auto;
+      z-index: 11;
+    }
+
+    #joystickContainer, #cameraContainer {
+      position: relative;
+      width: 100px;
+      height: 100px;
+      background: rgba(20, 30, 50, 0.6);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4), inset 0 0 10px rgba(255, 255, 255, 0.1);
+    }
+
+    #joystickThumb, #cameraThumb {
+      position: absolute;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    #joystickThumb {
+      background: linear-gradient(135deg, #4cc9f0, #4361ee);
+      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.6);
+    }
+
+    #cameraThumb {
+      background: linear-gradient(135deg, #f093fb, #f5576c);
+      box-shadow: 0 4px 12px rgba(245, 87, 108, 0.6);
+    }
+
+    #jumpButton {
+      width: 70px;
+      height: 70px;
+      background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+      border: none;
+      border-radius: 50%;
+      color: white;
+      font-weight: 700;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(255, 107, 107, 0.5);
+      flex-shrink: 0;
+      transition: transform 0.1s, box-shadow 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    #jumpButton:active {
+      transform: scale(0.95);
+      box-shadow: 0 3px 10px rgba(255, 107, 107, 0.7);
+    }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(9, 15, 25, 0.5);
+      backdrop-filter: blur(6px);
+      z-index: 20;
+    }
+
+    #overlay.hidden {
+      display: none;
+    }
+
+    .card {
+      width: min(520px, calc(100vw - 32px));
+      background: rgba(16, 24, 40, 0.9);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 18px;
+      padding: 28px 24px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(1.8rem, 4vw, 2.5rem);
+    }
+
+    p {
+      margin: 10px 0;
+      line-height: 1.5;
+      color: #dfe8ff;
+      font-size: 14px;
+    }
+
+    button {
+      margin-top: 18px;
+      background: linear-gradient(135deg, #4cc9f0, #4361ee);
+      color: white;
+      border: none;
+      border-radius: 999px;
+      padding: 12px 24px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 14px 28px rgba(67, 97, 238, 0.48);
+      transition: transform 0.15s;
+    }
+
+    button:active {
+      transform: scale(0.95);
+    }
+
+    @media (max-width: 768px) {
+      #hud {
+        padding: 0 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .panel {
+        min-width: 80px;
+        padding: 6px 10px;
+      }
+
+      #statusText {
+        font-size: 12px;
+      }
+
+      #mobileControls {
+        padding: 12px;
+        gap: 8px;
+      }
+
+      #joystickContainer, #cameraContainer {
+        width: 85px;
+        height: 85px;
+      }
+
+      #joystickThumb, #cameraThumb {
+        width: 38px;
+        height: 38px;
+      }
+
+      #jumpButton {
+        width: 60px;
+        height: 60px;
+        font-size: 20px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      #hud {
+        top: 10px;
+      }
+
+      .panel {
+        min-width: 70px;
+        padding: 5px 8px;
+      }
+
+      .label {
+        font-size: 8px;
+      }
+
+      #towerName, #timerText, #statusText {
+        font-size: 11px;
+      }
+
+      #mobileControls {
+        padding: 10px;
+        gap: 6px;
+      }
+
+      #joystickContainer, #cameraContainer {
+        width: 75px;
+        height: 75px;
+      }
+
+      #jumpButton {
+        width: 55px;
+        height: 55px;
+        font-size: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div class="panel left">
+      <span class="label">Tower</span>
+      <span id="towerName">1 / 5</span>
+    </div>
+
+    <div class="panel center">
+      <span id="statusText">Climb to the top!</span>
+    </div>
+
+    <div class="panel right">
+      <span class="label">Reset</span>
+      <span id="timerText">05:00</span>
+    </div>
+  </div>
+
+  <div id="mobileControls">
+    <div id="joystickContainer">
+      <div id="joystickThumb"></div>
+    </div>
+    <button id="jumpButton">↑</button>
+    <div id="cameraContainer">
+      <div id="cameraThumb"></div>
+    </div>
+  </div>
+
+  <div id="overlay">
+    <div class="card">
+      <h1>Tower of Hell</h1>
+      <p>Left joystick: Move</p>
+      <p>Jump button: Jump</p>
+      <p>Right joystick: Look around</p>
+      <p>Climb the rainbow tower to the top while dodging lasers!</p>
+      <button id="startButton">Start Game</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js";
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x9ecbff);
+    scene.fog = new THREE.Fog(0x9ecbff, 25, 180);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera.rotation.order = "YXZ";
+
+    const towerGroup = new THREE.Group();
+    scene.add(towerGroup);
+
+    const ambient = new THREE.HemisphereLight(0xcfe9ff, 0x375a36, 1.1);
+    scene.add(ambient);
+
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+    sun.position.set(12, 24, 8);
+    scene.add(sun);
+
+    const sky = new THREE.Mesh(
+      new THREE.SphereGeometry(220, 32, 32),
+      new THREE.MeshBasicMaterial({ color: 0xbfe3ff, side: THREE.BackSide })
+    );
+    scene.add(sky);
+
+    const baseGround = new THREE.Mesh(
+      new THREE.CylinderGeometry(90, 110, 10, 32),
+      new THREE.MeshStandardMaterial({
+        color: 0x7ea76d,
+        roughness: 0.95,
+        metalness: 0.05
+      })
+    );
+    baseGround.position.set(0, -5, 0);
+    baseGround.userData.isFloor = true;
+    scene.add(baseGround);
+
+    const player = {
+      position: new THREE.Vector3(0, 3, 14),
+      velocity: new THREE.Vector3(),
+      radius: 0.45,
+      height: 1.8,
+      onGround: false
+    };
+
+    let yaw = 0;
+    let pitch = 0;
+    let started = false;
+    let finishReached = false;
+    let currentTowerIndex = 0;
+    let currentPlatforms = [];
+    let resetDeadline = 0;
+    let lasers = [];
+
+    // Mobile input
+    let joystickInput = { x: 0, y: 0 };
+    let cameraInput = { x: 0, y: 0 };
+    let jumpPressed = false;
+
+    const ui = {
+      overlay: document.getElementById("overlay"),
+      startButton: document.getElementById("startButton"),
+      towerName: document.getElementById("towerName"),
+      statusText: document.getElementById("statusText"),
+      timerText: document.getElementById("timerText"),
+      joystickContainer: document.getElementById("joystickContainer"),
+      joystickThumb: document.getElementById("joystickThumb"),
+      cameraContainer: document.getElementById("cameraContainer"),
+      cameraThumb: document.getElementById("cameraThumb"),
+      jumpButton: document.getElementById("jumpButton")
+    };
+
+    // Left joystick logic
+    let joystickActive = false;
+    let joystickStartX = 0;
+    let joystickStartY = 0;
+    let joystickCurrentX = 0;
+    let joystickCurrentY = 0;
+    const joystickRadius = 40;
+
+    ui.joystickContainer.addEventListener("touchstart", (e) => {
+      if (!started) return;
+      const touch = e.touches[0];
+      const rect = ui.joystickContainer.getBoundingClientRect();
+      joystickActive = true;
+      joystickStartX = rect.left + rect.width / 2;
+      joystickStartY = rect.top + rect.height / 2;
+      joystickCurrentX = touch.clientX;
+      joystickCurrentY = touch.clientY;
+      updateJoystick();
+    });
+
+    // Right camera joystick logic
+    let cameraActive = false;
+    let cameraStartX = 0;
+    let cameraStartY = 0;
+    let cameraCurrentX = 0;
+    let cameraCurrentY = 0;
+    const cameraRadius = 40;
+
+    ui.cameraContainer.addEventListener("touchstart", (e) => {
+      if (!started) return;
+      const touch = e.touches[0];
+      const rect = ui.cameraContainer.getBoundingClientRect();
+      cameraActive = true;
+      cameraStartX = rect.left + rect.width / 2;
+      cameraStartY = rect.top + rect.height / 2;
+      cameraCurrentX = touch.clientX;
+      cameraCurrentY = touch.clientY;
+      updateCameraStick();
+    });
+
+    document.addEventListener("touchmove", (e) => {
+      if (!started) return;
+
+      for (const touch of e.touches) {
+        if (joystickActive) {
+          const rect = ui.joystickContainer.getBoundingClientRect();
+          const dx = touch.clientX - (rect.left + rect.width / 2);
+          const dy = touch.clientY - (rect.top + rect.height / 2);
+          if (Math.abs(dx) < 120 && Math.abs(dy) < 120) {
+            joystickCurrentX = touch.clientX;
+            joystickCurrentY = touch.clientY;
+            updateJoystick();
+          }
+        }
+
+        if (cameraActive) {
+          const rect = ui.cameraContainer.getBoundingClientRect();
+          const dx = touch.clientX - (rect.left + rect.width / 2);
+          const dy = touch.clientY - (rect.top + rect.height / 2);
+          if (Math.abs(dx) < 120 && Math.abs(dy) < 120) {
+            cameraCurrentX = touch.clientX;
+            cameraCurrentY = touch.clientY;
+            updateCameraStick();
+          }
+        }
+      }
+    });
+
+    document.addEventListener("touchend", () => {
+      joystickActive = false;
+      cameraActive = false;
+      joystickInput.x = 0;
+      joystickInput.y = 0;
+      cameraInput.x = 0;
+      cameraInput.y = 0;
+      ui.joystickThumb.style.transform = "translate(-50%, -50%)";
+      ui.cameraThumb.style.transform = "translate(-50%, -50%)";
+    });
+
+    function updateJoystick() {
+      const dx = joystickCurrentX - joystickStartX;
+      const dy = joystickCurrentY - joystickStartY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance > joystickRadius) {
+        const angle = Math.atan2(dy, dx);
+        joystickInput.x = Math.cos(angle);
+        joystickInput.y = Math.sin(angle);
+        const thumbDist = joystickRadius - 5;
+        const thumbX = Math.cos(angle) * thumbDist;
+        const thumbY = Math.sin(angle) * thumbDist;
+        ui.joystickThumb.style.transform = `translate(calc(-50% + ${thumbX}px), calc(-50% + ${thumbY}px))`;
+      } else {
+        joystickInput.x = dx / joystickRadius;
+        joystickInput.y = dy / joystickRadius;
+        ui.joystickThumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      }
+    }
+
+    function updateCameraStick() {
+      const dx = cameraCurrentX - cameraStartX;
+      const dy = cameraCurrentY - cameraStartY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance > cameraRadius) {
+        const angle = Math.atan2(dy, dx);
+        cameraInput.x = Math.cos(angle);
+        cameraInput.y = Math.sin(angle);
+        const thumbDist = cameraRadius - 5;
+        const thumbX = Math.cos(angle) * thumbDist;
+        const thumbY = Math.sin(angle) * thumbDist;
+        ui.cameraThumb.style.transform = `translate(calc(-50% + ${thumbX}px), calc(-50% + ${thumbY}px))`;
+      } else {
+        cameraInput.x = dx / cameraRadius;
+        cameraInput.y = dy / cameraRadius;
+        ui.cameraThumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      }
+    }
+
+    ui.jumpButton.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (!started) return;
+      jumpPressed = true;
+    });
+
+    ui.jumpButton.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      jumpPressed = false;
+    });
+
+    function createPlatform(width, depth, height, x, y, z, color = 0x7ad69a) {
+      const mat = new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.82,
+        metalness: 0.18
+      });
+
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), mat);
+      mesh.position.set(x, y, z);
+      mesh.userData.isPlatform = true;
+      towerGroup.add(mesh);
+      return mesh;
+    }
+
+    const rainbowColors = [
+      0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x0000ff, 0x4b0082, 0x9400d3
+    ];
+
+    function createRainbowWall() {
+      const wallHeight = 85;
+      const wallRadius = 13.5;
+      const segments = 64;
+
+      for (let i = 0; i < segments; i++) {
+        const angle1 = (i / segments) * Math.PI * 2;
+        const angle2 = ((i + 1) / segments) * Math.PI * 2;
+
+        const x1 = Math.cos(angle1) * wallRadius;
+        const z1 = Math.sin(angle1) * wallRadius;
+        const x2 = Math.cos(angle2) * wallRadius;
+        const z2 = Math.sin(angle2) * wallRadius;
+
+        const color = rainbowColors[i % rainbowColors.length];
+
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array([
+          x1, 0, z1,
+          x2, 0, z2,
+          x2, wallHeight, z2,
+          x1, wallHeight, z1
+        ]);
+
+        const indices = [0, 1, 2, 0, 2, 3];
+        geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({
+          color,
+          roughness: 0.7,
+          metalness: 0.3,
+          emissive: color,
+          emissiveIntensity: 0.2
+        });
+
+        const mesh = new THREE.Mesh(geometry, material);
+        towerGroup.add(mesh);
+      }
+    }
+
+    function addLaser(x, y, z, length, rotationY = 0, color = 0xff2a6d) {
+      const laser = new THREE.Mesh(
+        new THREE.BoxGeometry(length, 0.15, 0.15),
+        new THREE.MeshStandardMaterial({
+          color,
+          emissive: color,
+          emissiveIntensity: 1.3,
+          metalness: 0.2,
+          roughness: 0.3
+        })
+      );
+      laser.position.set(x, y, z);
+      laser.rotation.y = rotationY;
+      laser.userData.isLaser = true;
+      towerGroup.add(laser);
+      lasers.push(laser);
+    }
+
+    function addDecorativeTowerRing() {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(18, 0.75, 12, 80),
+        new THREE.MeshStandardMaterial({
+          color: 0x486a8d,
+          emissive: 0x1d2f4a,
+          roughness: 0.6,
+          metalness: 0.3
+        })
+      );
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = 28;
+      towerGroup.add(ring);
+    }
+
+    function clearTower() {
+      while (towerGroup.children.length > 0) {
+        towerGroup.remove(towerGroup.children[0]);
+      }
+      lasers = [];
+    }
+
+    function buildTowerOne() {
+      const platforms = [];
+
+      createPlatform(12, 12, 1.2, 0, 0.7, 14, 0x5bcf8b);
+      platforms.push({ x: 0, y: 0.7, z: 14, w: 12, d: 12, topY: 1.3 });
+
+      for (let i = 0; i < 14; i++) {
+        const y = 2 + i * 4.2;
+        const x = Math.sin(i * 1.5) * 4.8;
+        const z = 14 - i * 0.9;
+        const w = 5.5;
+        const d = 4.5;
+        createPlatform(w, d, 1.1, x, y, z, 0x7cd39d + (i * 4));
+        platforms.push({ x, y, z, w, d, topY: y + 0.55 });
+
+        if (i % 2 === 1) {
+          addLaser(x, y + 1.2, z, 4.5, 0, i % 2 === 0 ? 0xff2a6d : 0x2ad4ff);
+        }
+      }
+
+      createPlatform(10, 10, 1.3, 0, 57, 0, 0xffd166);
+      platforms.push({ x: 0, y: 57, z: 0, w: 10, d: 10, topY: 57.65 });
+
+      createRainbowWall();
+      return platforms;
+    }
+
+    function buildTowerTwo() {
+      const platforms = [];
+
+      createPlatform(12, 12, 1.2, 0, 0.7, 12, 0x5cc9a6);
+      platforms.push({ x: 0, y: 0.7, z: 12, w: 12, d: 12, topY: 1.3 });
+
+      for (let i = 0; i < 15; i++) {
+        const y = 2.2 + i * 4.0;
+        const direction = i % 2 === 0 ? 1 : -1;
+        const x = direction * (6.2 + (i % 3) * 1.8);
+        const z = 10 - i * 0.85 + Math.sin(i * 1.4) * 2.0;
+        const w = 4.8;
+        const d = 4.2;
+        createPlatform(w, d, 1.15, x, y, z, 0x7be1d4 + (i * 6));
+        platforms.push({ x, y, z, w, d, topY: y + 0.575 });
+
+        if (i % 2 === 0) {
+          addLaser(x, y + 1.2, z - 1.5, 4.8, 0, 0xff2a6d);
+        }
+      }
+
+      createPlatform(11, 11, 1.3, 0, 59.5, 0, 0xffb703);
+      platforms.push({ x: 0, y: 59.5, z: 0, w: 11, d: 11, topY: 60.15 });
+
+      createRainbowWall();
+      addDecorativeTowerRing();
+      return platforms;
+    }
+
+    function buildTowerThree() {
+      const platforms = [];
+
+      createPlatform(14, 14, 1.3, 0, 0.7, 10, 0x7b8cff);
+      platforms.push({ x: 0, y: 0.7, z: 10, w: 14, d: 14, topY: 1.35 });
+
+      for (let i = 0; i < 18; i++) {
+        const y = 2.3 + i * 3.5;
+        const angle = (i / 18) * Math.PI * 2;
+        const radius = 9 + (i % 4) * 1.6;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        const w = 5.0 + (i % 2) * 0.5;
+        const d = 5.0 + (i % 2) * 0.5;
+        createPlatform(w, d, 1.1, x, y, z, 0xa6d4ff + i * 4);
+        platforms.push({ x, y, z, w, d, topY: y + 0.55 });
+
+        if (i % 2 === 1) {
+          addLaser(x, y + 1.2, z, 5.2, Math.PI / 2, 0x2ad4ff);
+        }
+      }
+
+      createPlatform(12, 12, 1.4, 0, 62.5, 0, 0xff7b7b);
+      platforms.push({ x: 0, y: 62.5, z: 0, w: 12, d: 12, topY: 63.2 });
+
+      createRainbowWall();
+
+      const pillars = new THREE.Group();
+      for (let i = 0; i < 16; i++) {
+        const angle = (i / 16) * Math.PI * 2;
+        const pillar = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.7, 0.8, 70, 12),
+          new THREE.MeshStandardMaterial({ color: 0x465a70, roughness: 0.9 })
+        );
+        pillar.position.set(Math.cos(angle) * 12, 34, Math.sin(angle) * 12);
+        pillars.add(pillar);
+      }
+      towerGroup.add(pillars);
+
+      return platforms;
+    }
+
+    function buildTowerFour() {
+      const platforms = [];
+
+      createPlatform(14, 14, 1.3, 0, 0.7, 13, 0x6be7c3);
+      platforms.push({ x: 0, y: 0.7, z: 13, w: 14, d: 14, topY: 1.35 });
+
+      for (let i = 0; i < 17; i++) {
+        const y = 2.4 + i * 3.9;
+        const x = Math.sin(i * 1.2) * (5.2 + (i % 3) * 1.8);
+        const z = 13 - i * 0.8;
+        const w = 5.8;
+        const d = 4.2;
+        createPlatform(w, d, 1.1, x, y, z, 0x7af0d0 + (i * 5));
+        platforms.push({ x, y, z, w, d, topY: y + 0.55 });
+
+        if (i % 2 === 0) {
+          addLaser(x, y + 1.2, z + 1.5, 5.8, Math.PI / 2, 0xff2a6d);
+        }
+      }
+
+      createPlatform(10, 10, 1.4, 0, 66, 0, 0xf7c948);
+      platforms.push({ x: 0, y: 66, z: 0, w: 10, d: 10, topY: 66.7 });
+
+      createRainbowWall();
+      return platforms;
+    }
+
+    function buildTowerFive() {
+      const platforms = [];
+
+      createPlatform(15, 15, 1.25, 0, 0.7, 11, 0x8fa3ff);
+      platforms.push({ x: 0, y: 0.7, z: 11, w: 15, d: 15, topY: 1.35 });
+
+      for (let i = 0; i < 20; i++) {
+        const y = 2.3 + i * 3.6;
+        const offset = i % 2 === 0 ? 1 : -1;
+        const x = offset * (7 + (i % 3) * 2.0);
+        const z = 11 - i * 0.75 + Math.sin(i * 1.7) * 1.8;
+        const w = 5.2;
+        const d = 5.2;
+        createPlatform(w, d, 1.1, x, y, z, 0xb7c5ff + (i * 3));
+        platforms.push({ x, y, z, w, d, topY: y + 0.55 });
+
+        if (i % 2 === 1) {
+          addLaser(x + 1.6, y + 1.2, z, 4.8, 0, 0x2ad4ff);
+          addLaser(x - 1.6, y + 1.2, z, 4.8, 0, 0xff2a6d);
+        }
+      }
+
+      createPlatform(12, 12, 1.5, 0, 71.5, 0, 0xff8fab);
+      platforms.push({ x: 0, y: 71.5, z: 0, w: 12, d: 12, topY: 72.25 });
+
+      createRainbowWall();
+      return platforms;
+    }
+
+    const towerPatterns = [buildTowerOne, buildTowerTwo, buildTowerThree, buildTowerFour, buildTowerFive];
+
+    function updateHUD() {
+      ui.towerName.textContent = `${currentTowerIndex + 1} / ${towerPatterns.length}`;
+    }
+
+    function spawnTower(index) {
+      clearTower();
+      currentTowerIndex = index;
+      currentPlatforms = towerPatterns[index]();
+      const startPlatform = currentPlatforms[0];
+
+      player.position.set(
+        startPlatform.x,
+        startPlatform.topY + player.height / 2 + 0.35,
+        startPlatform.z
+      );
+      player.velocity.set(0, 0, 0);
+      player.onGround = false;
+      finishReached = false;
+
+      updateHUD();
+      ui.statusText.textContent = "Climb to the top!";
+      resetDeadline = performance.now() + 5 * 60 * 1000;
+
+      camera.position.set(
+        player.position.x,
+        player.position.y + 1.0,
+        player.position.z + 5
+      );
+      camera.rotation.set(0, 0, 0);
+      yaw = 0;
+      pitch = 0;
+    }
+
+    function startGame() {
+      started = true;
+      ui.overlay.classList.add("hidden");
+      spawnTower(0);
+    }
+
+    function cycleTower() {
+      currentTowerIndex = (currentTowerIndex + 1) % towerPatterns.length;
+      spawnTower(currentTowerIndex);
+      ui.statusText.textContent = "New tower generated!";
+    }
+
+    function updateTimer() {
+      if (!started) return;
+
+      const remainingMs = Math.max(0, resetDeadline - performance.now());
+      const totalSeconds = Math.ceil(remainingMs / 1000);
+      const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+      const seconds = String(totalSeconds % 60).padStart(2, "0");
+      ui.timerText.textContent = `${minutes}:${seconds}`;
+
+      if (remainingMs <= 0) {
+        cycleTower();
+      }
+    }
+
+    function handleInput(delta) {
+      const moveX = joystickInput.x;
+      const moveY = joystickInput.y;
+
+      const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+      const right = new THREE.Vector3(forward.z, 0, -forward.x);
+
+      const move = new THREE.Vector3();
+      move.addScaledVector(forward, moveY);
+      move.addScaledVector(right, moveX);
+
+      if (move.lengthSq() > 0) {
+        move.normalize();
+      }
+
+      const speed = 6.5;
+      const targetX = move.x * speed;
+      const targetZ = move.z * speed;
+
+      player.velocity.x = THREE.MathUtils.lerp(player.velocity.x, targetX, 0.18);
+      player.velocity.z = THREE.MathUtils.lerp(player.velocity.z, targetZ, 0.18);
+
+      if (jumpPressed && player.onGround) {
+        player.velocity.y = 9.8;
+        player.onGround = false;
+        jumpPressed = false;
+      }
+
+      player.velocity.y -= 18 * delta;
+
+      player.position.x += player.velocity.x * delta;
+      player.position.z += player.velocity.z * delta;
+      player.position.y += player.velocity.y * delta;
+    }
+
+    function resolvePlatformCollision() {
+      let grounded = false;
+
+      for (const platform of currentPlatforms) {
+        const dx = player.position.x - platform.x;
+        const dz = player.position.z - platform.z;
+
+        const halfW = platform.w / 2 + player.radius;
+        const halfD = platform.d / 2 + player.radius;
+
+        if (Math.abs(dx) <= halfW && Math.abs(dz) <= halfD) {
+          const feetY = player.position.y - player.height / 2;
+          const topY = platform.topY + 0.1;
+
+          if (
+            player.velocity.y <= 0 &&
+            feetY <= topY + 0.45 &&
+            feetY >= topY - 1.8
+          ) {
+            player.position.y = topY + player.height / 2;
+            player.velocity.y = 0;
+            grounded = true;
+            break;
+          }
+        }
+      }
+
+      if (!grounded && player.position.y < -20) {
+        respawnPlayer();
+      }
+
+      player.onGround = grounded;
+    }
+
+    function respawnPlayer() {
+      const startPlatform = currentPlatforms[0];
+      player.position.set(
+        startPlatform.x,
+        startPlatform.topY + player.height / 2 + 0.35,
+        startPlatform.z
+      );
+      player.velocity.set(0, 0, 0);
+      player.onGround = true;
+      ui.statusText.textContent = "You fell! Try again.";
+    }
+
+    function checkLaserHit() {
+      for (const laser of lasers) {
+        const laserPos = laser.getWorldPosition(new THREE.Vector3());
+        const playerPos = player.position.clone();
+        const distance = playerPos.distanceTo(laserPos);
+        const hitRadius = 1.2;
+
+        if (distance < hitRadius + 2.2) {
+          respawnPlayer();
+          return;
+        }
+      }
+    }
+
+    function checkFinish() {
+      if (finishReached) return;
+
+      const finishPlatform = currentPlatforms[currentPlatforms.length - 1];
+      const dx = Math.abs(player.position.x - finishPlatform.x);
+      const dz = Math.abs(player.position.z - finishPlatform.z);
+      const topY = finishPlatform.topY + player.height / 2;
+
+      if (
+        dx <= finishPlatform.w / 2 + 0.8 &&
+        dz <= finishPlatform.d / 2 + 0.8 &&
+        player.position.y >= topY
+      ) {
+        finishReached = true;
+        ui.statusText.textContent = "Tower cleared!";
+
+        setTimeout(() => {
+          if (started) cycleTower();
+        }, 1200);
+      }
+    }
+
+    function updateCameraPosition() {
+      yaw -= cameraInput.x * 0.06;
+      pitch -= cameraInput.y * 0.06;
+      pitch = THREE.MathUtils.clamp(pitch, -Math.PI / 2 + 0.12, Math.PI / 2 - 0.12);
+
+      camera.position.set(
+        player.position.x,
+        player.position.y + player.height * 0.7,
+        player.position.z
+      );
+
+      camera.rotation.y = yaw;
+      camera.rotation.x = pitch;
+    }
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = Math.min(0.033, clock.getDelta());
+
+      if (!started) {
+        renderer.render(scene, camera);
+        return;
+      }
+
+      handleInput(delta);
+      resolvePlatformCollision();
+      checkLaserHit();
+      checkFinish();
+      updateCameraPosition();
+      updateTimer();
+
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    ui.startButton.addEventListener("click", startGame);
+
+    camera.position.set(0, 5, 20);
+    ui.timerText.textContent = "05:00";
+    renderer.render(scene, camera);
+    animate();
+  </script>
+</body>
+</html>
