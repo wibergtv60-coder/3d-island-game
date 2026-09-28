@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
+  <title>Ohio Tools</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #87ceeb;
+      font-family: Arial, Helvetica, sans-serif;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    canvas { display: block; }
+
+    #hud{
+      position:fixed;left:12px;top:12px;z-index:30;
+      background:rgba(0,0,0,0.45);color:#fff;padding:10px;border-radius:8px;
+      font-size:14px;min-width:220px;
+    }
+    #hpbar{width:200px;height:16px;background:#441111;border-radius:8px;overflow:hidden;margin-top:6px}
+    #hpfill{height:100%;background:#27d34d;width:100%;transition:width .12s}
+    #slots{margin-top:8px;display:flex;gap:8px}
+    .slot{flex:1;background:rgba(255,255,255,0.06);padding:8px;border-radius:6px;text-align:center}
+    .selected{outline:3px solid #fff2;box-shadow:0 0 8px #ffe600 inset}
+
+    #msg{
+      position:fixed;left:50%;top:10%;transform:translateX(-50%);
+      z-index:30;color:#fff;text-shadow:0 0 8px #000;font-size:18px;
+    }
+
+    #start{
+      position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:40;
+      background:rgba(0,0,0,0.35);touch-action:manipulation;
+    }
+    #start.hidden{display:none}
+    #start .box{
+      background:rgba(0,0,0,0.7);padding:24px;border-radius:12px;color:#fff;text-align:center;max-width:320px;
+    }
+
+    #touchLeft{
+      position:fixed;left:12px;bottom:12px;
+      width:40%;height:40%;max-width:320px;max-height:320px;
+      touch-action:none;z-index:35;
+      pointer-events:auto;
+      display:none;
+    }
+    #touchLeft.visible{
+      display:flex;align-items:center;justify-content:center;
+    }
+    .joyBase{
+      position:absolute;left:0;bottom:0;width:140px;height:140px;border-radius:70px;
+      background:rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;
+    }
+    .joyKnob{
+      width:56px;height:56px;border-radius:28px;background:rgba(255,255,255,0.26);
+      transform:translate(0,0);
+    }
+
+    #touchRight{
+      position:fixed;right:12px;bottom:12px;width:34%;height:40%;max-width:300px;max-height:300px;
+      z-index:35;pointer-events:auto;
+      display:none;
+    }
+    #touchRight.visible{
+      display:block;
+    }
+    .btn{
+      position:absolute;width:72px;height:72px;border-radius:36px;
+      background:rgba(0,0,0,0.35);color:#fff;display:flex;align-items:center;justify-content:center;
+      font-weight:700;touch-action:manipulation;
+    }
+    #btnJump{right:18px;bottom:18px}
+    #btnUse{right:100px;bottom:18px}
+    #btnSwap{right:18px;bottom:100px;width:56px;height:56px;border-radius:28px}
+
+    #help{
+      position:fixed;right:12px;top:12px;z-index:30;color:#eee;
+      background:rgba(0,0,0,0.35);padding:8px;border-radius:8px;font-size:13px;
+      display:none;
+    }
+    #help.visible{
+      display:block;
+    }
+
+    @media (min-width:900px){
+      #touchLeft.visible,#touchRight.visible,#help.visible{display:none}
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div style="font-weight:700">OHIO TOOLS</div>
+    <div>Health: <span id="hpText">100</span></div>
+    <div id="hpbar"><div id="hpfill"></div></div>
+    <div id="slots">
+      <div id="slot0" class="slot">1: <span id="t0">—</span></div>
+      <div id="slot1" class="slot">2: <span id="t1">—</span></div>
+    </div>
+  </div>
+
+  <div id="help">WASD / Joystick • Tap to look • 1/2 to switch • SPACE/Tap Jump</div>
+  <div id="msg">Click / Tap to start</div>
+
+  <div id="start" role="button" aria-label="Start game">
+    <div class="box">
+      <h2>Ohio Tools</h2>
+      <p>Tap / Click to start — mobile and desktop supported</p>
+      <p><b>Tap to start</b></p>
+    </div>
+  </div>
+
+  <div id="touchLeft">
+    <div class="joyBase" id="joyBase">
+      <div class="joyKnob" id="joyKnob"></div>
+    </div>
+  </div>
+
+  <div id="touchRight">
+    <div id="btnUse" class="btn">USE</div>
+    <div id="btnJump" class="btn">JUMP</div>
+    <div id="btnSwap" class="btn">⇄</div>
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://unpkg.com/three@0.158.0/build/three.module.js";
+    import { PointerLockControls } from "https://unpkg.com/three@0.158.0/examples/jsm/controls/PointerLockControls.js";
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+    scene.fog = new THREE.Fog(0x87ceeb, 120, 360);
+
+    const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 800);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xbfeaff, 0x445522, 1.3));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+    sun.position.set(50, 120, 30);
+    scene.add(sun);
+
+    function mat(color) { return new THREE.MeshStandardMaterial({ color, roughness: 0.8 }); }
+    function boxMesh(c, x, y, z) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(x, y, z), mat(c));
+      m.castShadow = true; m.receiveShadow = true; return m;
+    }
+    function sphereMesh(c, r) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), mat(c));
+      m.castShadow = true; return m;
+    }
+    function cylinderMesh(c, r, h) {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 12), mat(c));
+      m.castShadow = true; return m;
+    }
+
+    const MAP_SIZE = 180, HALF = MAP_SIZE / 2;
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(MAP_SIZE, MAP_SIZE), mat(0x2f7a3f));
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const wallH = 8;
+    const wallC = 0x6b4226;
+    scene.add(boxMesh(wallC, MAP_SIZE, wallH, 3)).position.set(0, wallH/2, -HALF);
+    scene.add(boxMesh(wallC, MAP_SIZE, wallH, 3)).position.set(0, wallH/2, HALF);
+    const west = boxMesh(wallC, 3, wallH, MAP_SIZE); west.position.set(-HALF, wallH/2, 0); scene.add(west);
+    const east = boxMesh(wallC, 3, wallH, MAP_SIZE); east.position.set(HALF, wallH/2, 0); scene.add(east);
+
+    const TOOLS = ["Hug Spoon", "Train Airstrike", "🗿 Moai", "Fizza Gun"];
+    function randTool() { return TOOLS[Math.floor(Math.random() * TOOLS.length)]; }
+    function randTwo() { return [randTool(), randTool()]; }
+
+    const player = {
+      group: new THREE.Group(),
+      pos: new THREE.Vector3(0, 0, 0),
+      velY: 0,
+      onGround: true,
+      speed: 10,
+      health: 100,
+      inv: randTwo(),
+      selected: 0,
+      alive: true
+    };
+
+    const torso = boxMesh(0x246bdb, 1.4, 1.8, 1.0);
+    const head = sphereMesh(0x88c0ff, 0.45); head.position.set(0, 1.45, 0);
+    const legL = cylinderMesh(0x123c8a, 0.12, 1.0); legL.position.set(-0.28, -0.5, 0);
+    const legR = cylinderMesh(0x123c8a, 0.12, 1.0); legR.position.set(0.28, -0.5, 0);
+    player.group.add(torso, head, legL, legR);
+    player.group.position.set(0, 1, 0);
+    scene.add(player.group);
+
+    camera.position.set(0, 1.6, 5);
+    const controls = new PointerLockControls(camera, renderer.domElement);
+
+    const startEl = document.getElementById('start');
+    const msgEl = document.getElementById('msg');
+    const touchLeftEl = document.getElementById('touchLeft');
+    const touchRightEl = document.getElementById('touchRight');
+    const helpEl = document.getElementById('help');
+    const joyBase = document.getElementById('joyBase');
+    const joyKnob = document.getElementById('joyKnob');
+    const btnUse = document.getElementById('btnUse');
+    const btnJump = document.getElementById('btnJump');
+    const btnSwap = document.getElementById('btnSwap');
+
+    let joyActive = false, joyId = null, joyStartX = 0, joyStartY = 0, joyVec = { x: 0, y: 0 };
+    let lookStartX = 0, lookStartY = 0, isLooking = false, lookId = null;
+    let started = false;
+
+    function resetJoy() {
+      joyKnob.style.transform = 'translate(0px,0px)';
+      joyVec = { x: 0, y: 0 };
+    }
+
+    function isMobile() {
+      return ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    }
+
+    function startGame() {
+      if (started) return;
+      started = true;
+      startEl.classList.add('hidden');
+      msgEl.style.display = 'none';
+
+      // Show mobile controls if on mobile
+      if (isMobile()) {
+        touchLeftEl.classList.add('visible');
+        touchRightEl.classList.add('visible');
+        helpEl.classList.add('visible');
+        controls.isLocked = true;
+      } else {
+        try { controls.lock(); } catch (e) { console.warn(e); }
+      }
+    }
+
+    startEl.addEventListener('click', startGame);
+    startEl.addEventListener('touchstart', (e) => {
+      e.preventDefault(); startGame();
+    }, { passive: false });
+
+    joyBase.addEventListener('touchstart', (e) => {
+      for (const t of e.changedTouches) {
+        if (joyId === null) {
+          joyId = t.identifier;
+          joyActive = true;
+          joyStartX = t.clientX;
+          joyStartY = t.clientY;
+          e.preventDefault();
+          break;
+        }
+      }
+    }, { passive: false });
+
+    joyBase.addEventListener('touchmove', (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === joyId) {
+          const dx = t.clientX - joyStartX;
+          const dy = t.clientY - joyStartY;
+          const max = 56;
+          const nx = Math.max(-1, Math.min(1, dx / max));
+          const ny = Math.max(-1, Math.min(1, dy / max));
+          joyVec = { x: nx, y: -ny };
+          joyKnob.style.transform = `translate(${nx * 40}px, ${-ny * 40}px)`;
+          e.preventDefault();
+        }
+      }
+    }, { passive: false });
+
+    joyBase.addEventListener('touchend', (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === joyId) {
+          joyId = null;
+          joyActive = false;
+          resetJoy();
+          e.preventDefault();
+          break;
+        }
+      }
+    }, { passive: false });
+
+    document.addEventListener('touchstart', (e) => {
+      const touch = e.touches[0];
+      const btnArea = document.getElementById('touchRight');
+      const rect = btnArea.getBoundingClientRect();
+
+      if (!(touch.clientX >= rect.left && touch.clientX <= rect.right && touch.clientY >= rect.top && touch.clientY <= rect.bottom)) {
+        if (!isLooking) {
+          lookId = touch.identifier;
+          isLooking = true;
+          lookStartX = touch.clientX;
+          lookStartY = touch.clientY;
+        }
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+      if (isLooking && controls.isLocked) {
+        for (const t of e.touches) {
+          if (t.identifier === lookId) {
+            const deltaX = t.clientX - lookStartX;
+            const deltaY = t.clientY - lookStartY;
+
+            const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+            euler.setFromQuaternion(camera.quaternion);
+            euler.setFromVector3(new THREE.Vector3(
+              euler.x - (deltaY * 0.003),
+              euler.y - (deltaX * 0.003),
+              0
+            ));
+            camera.quaternion.setFromEuler(euler);
+
+            lookStartX = t.clientX;
+            lookStartY = t.clientY;
+            e.preventDefault();
+            break;
+          }
+        }
+      }
+    }, { passive: false });
+
+    document.addEventListener('touchend', (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === lookId) {
+          lookId = null;
+          isLooking = false;
+          break;
+        }
+      }
+    }, { passive: true });
+
+    function doJump(playerObj) {
+      if (playerObj.onGround) {
+        playerObj.velY = 15;
+        playerObj.onGround = false;
+      }
+    }
+
+    function useTool(playerObj, tool) {
+      if (!tool) return;
+
+      if (tool === "Hug Spoon") {
+        playerObj.health = Math.min(100, playerObj.health + 12);
+      } else if (tool === "Train Airstrike") {
+        playerObj.health = Math.max(0, playerObj.health - 10);
+      } else if (tool === "🗿 Moai") {
+        playerObj.speed = 12;
+        setTimeout(() => { playerObj.speed = 10; }, 2000);
+      } else if (tool === "Fizza Gun") {
+        console.log("Fizza Gun used");
+      }
+      updateHUD();
+    }
+
+    function updateHUD() {
+      document.getElementById('hpText').textContent = String(player.health);
+      document.getElementById('hpfill').style.width = player.health + '%';
+
+      document.getElementById('t0').textContent = player.inv[0] || '—';
+      document.getElementById('t1').textContent = player.inv[1] || '—';
+
+      document.getElementById('slot0').classList.toggle('selected', player.selected === 0);
+      document.getElementById('slot1').classList.toggle('selected', player.selected === 1);
+    }
+
+    btnUse.addEventListener('touchstart', (e) => { e.preventDefault(); useTool(player, player.inv[player.selected]); });
+    btnJump.addEventListener('touchstart', (e) => { e.preventDefault(); doJump(player); });
+    btnSwap.addEventListener('touchstart', (e) => { e.preventDefault(); player.selected = 1 - player.selected; updateHUD(); });
+    btnSwap.addEventListener('click', () => { player.selected = 1 - player.selected; updateHUD(); });
+
+    const keys = {};
+    window.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
+    window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (!started) {
+        renderer.render(scene, camera);
+        return;
+      }
+
+      if (controls.isLocked || isMobile()) {
+        const forward = (keys['w'] || joyVec.y > 0.2) ? joyVec.y : (keys['w'] ? 1 : 0);
+        const backward = (keys['s'] || joyVec.y < -0.2) ? -joyVec.y : (keys['s'] ? -1 : 0);
+        const left = (keys['a'] || joyVec.x < -0.2) ? -joyVec.x : (keys['a'] ? -1 : 0);
+        const right = (keys['d'] || joyVec.x > 0.2) ? joyVec.x : (keys['d'] ? 1 : 0);
+
+        const direction = new THREE.Vector3();
+        camera.getWorldDirection(direction);
+        direction.y = 0; direction.normalize();
+        const right_vec = new THREE.Vector3().crossVectors(camera.up, direction).normalize();
+
+        const moveDir = new THREE.Vector3();
+        moveDir.addScaledVector(direction, forward + backward);
+        moveDir.addScaledVector(right_vec, left + right);
+        moveDir.normalize().multiplyScalar(player.speed * 0.016);
+
+        player.pos.add(moveDir);
+      }
+
+      player.velY -= 9.8 * 0.016;
+      player.pos.y += player.velY * 0.016;
+
+      if (player.pos.y < 0) {
+        player.pos.y = 0;
+        player.velY = 0;
+        player.onGround = true;
+      }
+
+      player.group.position.copy(player.pos);
+      camera.position.set(player.pos.x, player.pos.y + 1.6, player.pos.z);
+
+      if (keys['1']) { player.selected = 0; updateHUD(); keys['1'] = false; }
+      if (keys['2']) { player.selected = 1; updateHUD(); keys['2'] = false; }
+      if (keys[' ']) { doJump(player); keys[' '] = false; }
+
+      renderer.render(scene, camera);
+    }
+
+    updateHUD();
+    animate();
+  </script>
+</body>
+</html>
