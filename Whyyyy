@@ -28,7 +28,7 @@
 
     /* right buttons */
     #touchRight{position:fixed;right:12px;bottom:12px;width:34%;height:40%;max-width:300px;max-height:300px;z-index:35}
-    .btn{position:absolute;width:72px;height:72px;border-radius:36px;background:rgba(0,0,0,0.35);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;touch-action:manipulation}
+    .btn{position:absolute;width:72px;height:72px;border-radius:36px;background:rgba(0,0,0,0.35);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;touch-action:manipulation;user-select:none}
     #btnJump{right:18px;bottom:18px}
     #btnUse{right:100px;bottom:18px}
     #btnSwap{right:18px;bottom:100px;width:56px;height:56px;border-radius:28px}
@@ -52,7 +52,7 @@
     </div>
   </div>
 
-  <div id="help">WASD / Joystick • Tap to look • 1/2 to switch • SPACE/Tap Jump</div>
+  <div id="help">WASD / Joystick • Tap to look • 1/2 to switch • SPACE/E to use</div>
   <div id="msg">Click / Tap to start</div>
 
   <div id="start" role="button" aria-label="Start game">
@@ -157,22 +157,36 @@
   const btnUse = document.getElementById('btnUse');
   const btnJump = document.getElementById('btnJump');
   const btnSwap = document.getElementById('btnSwap');
-  
+
   let joyActive=false, joyId=null, joyStartX=0, joyStartY=0, joyVec={x:0,y:0};
   let lookStartX=0, lookStartY=0, isLooking=false, lookId=null;
+  let msgTimer = null;
+  const projectiles = [];
+  const effects = [];
 
   function resetJoy(){ joyKnob.style.transform='translate(0px,0px)'; joyVec={x:0,y:0}; }
+  function showMessage(text) {
+    msgEl.textContent = text;
+    msgEl.style.display = 'block';
+    clearTimeout(msgTimer);
+    msgTimer = setTimeout(() => {
+      msgEl.style.display = 'none';
+    }, 1400);
+  }
+  function addEffect(obj, life, velocity = null) {
+    effects.push({ mesh: obj, life, maxLife: life, velocity: velocity || new THREE.Vector3() });
+  }
 
   // Movement joystick listeners
   joyBase.addEventListener('touchstart', (e)=> {
     for (const t of e.changedTouches) {
-      if (joyId === null) { 
-        joyId = t.identifier; 
-        joyActive = true; 
-        joyStartX = t.clientX; 
-        joyStartY = t.clientY; 
-        e.preventDefault(); 
-        break; 
+      if (joyId === null) {
+        joyId = t.identifier;
+        joyActive = true;
+        joyStartX = t.clientX;
+        joyStartY = t.clientY;
+        e.preventDefault();
+        break;
       }
     }
   }, { passive: false });
@@ -193,12 +207,12 @@
 
   joyBase.addEventListener('touchend', (e)=> {
     for (const t of e.changedTouches) {
-      if (t.identifier === joyId) { 
-        joyId = null; 
-        joyActive = false; 
-        resetJoy(); 
-        e.preventDefault(); 
-        break; 
+      if (t.identifier === joyId) {
+        joyId = null;
+        joyActive = false;
+        resetJoy();
+        e.preventDefault();
+        break;
       }
     }
   }, { passive: false });
@@ -208,8 +222,7 @@
     const touch = e.touches[0];
     const btnArea = document.getElementById('touchRight');
     const rect = btnArea.getBoundingClientRect();
-    
-    // Only start look if not touching a button
+
     if (!(touch.clientX >= rect.left && touch.clientX <= rect.right &&
           touch.clientY >= rect.top && touch.clientY <= rect.bottom)) {
       if (!isLooking) {
@@ -227,8 +240,7 @@
         if (t.identifier === lookId) {
           const deltaX = t.clientX - lookStartX;
           const deltaY = t.clientY - lookStartY;
-          
-          // Apply look rotation
+
           const euler = new THREE.Euler(0, 0, 0, 'YXZ');
           euler.setFromQuaternion(camera.quaternion);
           euler.setFromVector3(new THREE.Vector3(
@@ -237,7 +249,7 @@
             0
           ));
           camera.quaternion.setFromEuler(euler);
-          
+
           lookStartX = t.clientX;
           lookStartY = t.clientY;
           e.preventDefault();
@@ -259,6 +271,7 @@
 
   // Action buttons
   btnUse.addEventListener('touchstart', (e)=> { e.preventDefault(); useTool(player, player.inv[player.selected]); });
+  btnUse.addEventListener('click', ()=> { useTool(player, player.inv[player.selected]); });
   btnJump.addEventListener('touchstart', (e)=> { e.preventDefault(); doJump(player); });
   btnSwap.addEventListener('touchstart', (e)=> { e.preventDefault(); player.selected = 1 - player.selected; updateHUD(); });
   btnSwap.addEventListener('click', ()=> { player.selected = 1 - player.selected; updateHUD(); });
@@ -274,16 +287,14 @@
     started = true;
     startEl.classList.add('hidden');
     msgEl.style.display = 'none';
-    
+
     if (!isMobile()) {
-      // Desktop: request pointer lock
       try {
         controls.lock();
       } catch (err) {
         console.warn('Pointer lock failed:', err);
       }
     } else {
-      // Mobile: manually lock the controls
       controls.isLocked = true;
     }
   }
@@ -292,15 +303,79 @@
   startEl.addEventListener('click', (e)=> { e.preventDefault(); startGame(); });
   startEl.addEventListener('touchstart', (e)=> { e.preventDefault(); startGame(); }, { passive: false });
 
-  // Placeholder functions (add your actual implementations)
-  function useTool(player, tool) {
-    console.log('Using tool:', tool);
+  function useTool(targetPlayer, tool) {
+    if (!tool) {
+      showMessage('No tool selected');
+      return;
+    }
+
+    const origin = targetPlayer.group.position.clone().add(new THREE.Vector3(0, 1.25, 0));
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    dir.y = 0.1;
+    const fwd = dir.clone().normalize();
+
+    if (tool === 'Hug Spoon') {
+      const healAmount = Math.min(20, 100 - targetPlayer.health);
+      targetPlayer.health = Math.min(100, targetPlayer.health + 20);
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(1.8, 0.14, 12, 36),
+        new THREE.MeshStandardMaterial({ color: 0xffeb8e, emissive: 0xffcf33, emissiveIntensity: 0.7 })
+      );
+      ring.position.copy(origin);
+      ring.rotation.x = Math.PI / 2;
+      scene.add(ring);
+      addEffect(ring, 0.7, new THREE.Vector3(0, 0.2, 0));
+      showMessage(`Hug Spoon! +${healAmount} HP`);
+    }
+
+    if (tool === 'Train Airstrike') {
+      const target = origin.clone().add(fwd.clone().multiplyScalar(18));
+      target.y = 1.2;
+      const blast = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.2, 1.8, 2.2, 16),
+        new THREE.MeshStandardMaterial({ color: 0x2b2b2b, emissive: 0xff7a00, emissiveIntensity: 0.6 })
+      );
+      blast.position.copy(target);
+      blast.rotation.x = Math.PI / 2;
+      scene.add(blast);
+      addEffect(blast, 0.8);
+      showMessage('Train Airstrike incoming!');
+    }
+
+    if (tool === '🗿 Moai') {
+      const statuePos = origin.clone().add(fwd.clone().multiplyScalar(7));
+      statuePos.y = 0;
+      const statue = new THREE.Group();
+      const base = boxMesh(0xc3b39d, 1.8, 0.7, 1.8); base.position.y = 0.35;
+      const torso = boxMesh(0xe2ddd0, 1.2, 2.2, 0.9); torso.position.y = 2.1;
+      const head = sphereMesh(0xf4f0e5, 0.55); head.position.y = 3.7;
+      statue.add(base, torso, head);
+      statue.position.copy(statuePos);
+      scene.add(statue);
+      addEffect(statue, 2.2);
+      showMessage('Moai summoned!');
+    }
+
+    if (tool === 'Fizza Gun') {
+      const muzzle = origin.clone().add(fwd.clone().multiplyScalar(1.2));
+      const pellet = new THREE.Mesh(
+        new THREE.SphereGeometry(0.2, 10, 10),
+        new THREE.MeshStandardMaterial({ color: 0xffd260, emissive: 0xff8a00, emissiveIntensity: 0.7 })
+      );
+      pellet.position.copy(muzzle);
+      scene.add(pellet);
+      projectiles.push({ mesh: pellet, velocity: fwd.clone().multiplyScalar(26), life: 1.7 });
+      showMessage('Fizza Gun fired!');
+    }
+
+    updateHUD();
   }
 
-  function doJump(player) {
-    if (player.onGround) {
-      player.velY = 15;
-      player.onGround = false;
+  function doJump(playerObj) {
+    if (playerObj.onGround) {
+      playerObj.velY = 15;
+      playerObj.onGround = false;
     }
   }
 
@@ -309,6 +384,11 @@
     document.getElementById('t1').textContent = player.inv[1] || '—';
     document.getElementById('slot0').classList.toggle('selected', player.selected === 0);
     document.getElementById('slot1').classList.toggle('selected', player.selected === 1);
+
+    const hp = Math.max(0, Math.min(100, player.health));
+    document.getElementById('hpText').textContent = Math.ceil(hp);
+    document.getElementById('hpfill').style.width = `${hp}%`;
+    document.getElementById('hpfill').style.background = hp > 50 ? '#27d34d' : hp > 25 ? '#f2b600' : '#e3342f';
   }
 
   // Keyboard controls for desktop
@@ -325,30 +405,29 @@
       return;
     }
 
-    // Movement
     if (controls.isLocked || isMobile()) {
       const forward = (keys['w'] || joyVec.y > 0.2) ? joyVec.y : (keys['w'] ? 1 : 0);
       const backward = (keys['s'] || joyVec.y < -0.2) ? -joyVec.y : (keys['s'] ? -1 : 0);
       const left = (keys['a'] || joyVec.x < -0.2) ? -joyVec.x : (keys['a'] ? -1 : 0);
       const right = (keys['d'] || joyVec.x > 0.2) ? joyVec.x : (keys['d'] ? 1 : 0);
-      
+
       const direction = new THREE.Vector3();
       camera.getWorldDirection(direction);
       direction.y = 0; direction.normalize();
       const right_vec = new THREE.Vector3().crossVectors(camera.up, direction).normalize();
-      
+
       const moveDir = new THREE.Vector3();
       moveDir.addScaledVector(direction, forward + backward);
       moveDir.addScaledVector(right_vec, left + right);
       moveDir.normalize().multiplyScalar(player.speed * 0.016);
-      
+
       player.pos.add(moveDir);
     }
 
     // Gravity
     player.velY -= 9.8 * 0.016;
     player.pos.y += player.velY * 0.016;
-    
+
     if (player.pos.y < 0) {
       player.pos.y = 0;
       player.velY = 0;
@@ -361,7 +440,32 @@
     // Handle keyboard shortcuts
     if (keys['1']) { player.selected = 0; updateHUD(); keys['1'] = false; }
     if (keys['2']) { player.selected = 1; updateHUD(); keys['2'] = false; }
+    if (keys['e']) { useTool(player, player.inv[player.selected]); keys['e'] = false; }
     if (keys[' ']) { doJump(player); keys[' '] = false; }
+
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      const shot = projectiles[i];
+      shot.mesh.position.addScaledVector(shot.velocity, 0.016);
+      shot.life -= 0.016;
+      if (shot.life <= 0 || shot.mesh.position.length() > 240) {
+        scene.remove(shot.mesh);
+        projectiles.splice(i, 1);
+      }
+    }
+
+    for (let i = effects.length - 1; i >= 0; i--) {
+      const fx = effects[i];
+      fx.life -= 0.016;
+      fx.mesh.rotation.y += 0.06;
+      fx.mesh.scale.multiplyScalar(1.025);
+      if (fx.velocity) {
+        fx.mesh.position.addScaledVector(fx.velocity, 0.016);
+      }
+      if (fx.life <= 0) {
+        scene.remove(fx.mesh);
+        effects.splice(i, 1);
+      }
+    }
 
     renderer.render(scene, camera);
   }
