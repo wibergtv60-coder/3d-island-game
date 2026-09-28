@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Roblox-Style Tower of Hell</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #9ed5ff;
+      color: white;
+      font-family: Arial, Helvetica, sans-serif;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    body { position: relative; }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #hud {
+      position: absolute;
+      z-index: 5;
+      top: 12px;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 12px;
+      pointer-events: none;
+    }
+
+    .box {
+      background: rgba(16, 26, 43, 0.8);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 12px;
+      padding: 8px 12px;
+      text-align: center;
+      min-width: 85px;
+      backdrop-filter: blur(5px);
+    }
+
+    .box span {
+      display: block;
+      font-size: 11px;
+      opacity: 0.7;
+      text-transform: uppercase;
+    }
+
+    .box b {
+      font-size: 13px;
+    }
+
+    .middle {
+      flex: 1;
+      max-width: 340px;
+    }
+
+    #controls {
+      position: absolute;
+      z-index: 6;
+      bottom: 12px;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 0 14px;
+      pointer-events: none;
+    }
+
+    .stick {
+      width: 92px;
+      height: 92px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-radius: 50%;
+      background: rgba(23, 35, 58, 0.6);
+      position: relative;
+      pointer-events: auto;
+    }
+
+    .thumb {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    #moveThumb {
+      background: #4361ee;
+    }
+
+    #lookThumb {
+      background: #f5576c;
+    }
+
+    .controlButton {
+      width: 68px;
+      height: 68px;
+      border: 0;
+      border-radius: 50%;
+      background: #ef476f;
+      color: white;
+      font-size: 25px;
+      font-weight: bold;
+      pointer-events: auto;
+    }
+
+    .overlay {
+      position: absolute;
+      z-index: 10;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(9, 16, 29, 0.7);
+      backdrop-filter: blur(5px);
+    }
+
+    .overlay.hide {
+      display: none;
+    }
+
+    .card {
+      width: min(500px, calc(100% - 30px));
+      padding: 28px 22px;
+      border-radius: 18px;
+      text-align: center;
+      background: rgba(16, 24, 40, 0.95);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .card h1 {
+      margin: 0 0 12px;
+    }
+
+    .card p {
+      margin: 8px;
+      color: #dce8ff;
+    }
+
+    .start {
+      border: 0;
+      border-radius: 30px;
+      padding: 13px 26px;
+      margin-top: 12px;
+      color: white;
+      background: linear-gradient(135deg, #4cc9f0, #4361ee);
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    @media (max-width: 480px) {
+      .box {
+        min-width: 65px;
+        padding: 6px 7px;
+      }
+      .box b {
+        font-size: 11px;
+      }
+      .box span {
+        font-size: 8px;
+      }
+      .stick {
+        width: 78px;
+        height: 78px;
+      }
+      .thumb {
+        width: 35px;
+        height: 35px;
+      }
+      .controlButton {
+        width: 58px;
+        height: 58px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div class="box">
+      <span>Tower</span>
+      <b id="tower">1 / 5</b>
+    </div>
+    <div class="box middle">
+      <b id="status">Climb to the top!</b>
+    </div>
+    <div class="box">
+      <span>Reset</span>
+      <b id="timer">05:00</b>
+    </div>
+  </div>
+
+  <div id="controls">
+    <div id="moveStick" class="stick">
+      <div id="moveThumb" class="thumb"></div>
+    </div>
+    <button id="jump" class="controlButton">↑</button>
+    <div id="lookStick" class="stick">
+      <div id="lookThumb" class="thumb"></div>
+    </div>
+  </div>
+
+  <div id="overlay" class="overlay">
+    <div class="card">
+      <h1>Tower of Hell</h1>
+      <p>Left joystick: move</p>
+      <p>Right joystick: look around</p>
+      <p>Red lasers hurt. Rainbow walls and the ground are solid.</p>
+      <button id="start" class="start">Start Game</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js";
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x9ed5ff);
+    scene.fog = new THREE.Fog(0x9ed5ff, 25, 180);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera.rotation.order = "YXZ";
+
+    scene.add(new THREE.HemisphereLight(0xdaf0ff, 0x38502f, 1.2));
+
+    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+    sun.position.set(15, 30, 10);
+    scene.add(sun);
+
+    const sky = new THREE.Mesh(
+      new THREE.SphereGeometry(230, 24, 24),
+      new THREE.MeshBasicMaterial({ color: 0xc9eaff, side: THREE.BackSide })
+    );
+    scene.add(sky);
+
+    const world = new THREE.Group();
+    scene.add(world);
+
+    const FLOOR_TOP = 0;
+    const WALL_RADIUS = 13.8;
+    const WALL_HEIGHT = 90;
+
+    const floor = new THREE.Mesh(
+      new THREE.CylinderGeometry(100, 120, 10, 32),
+      new THREE.MeshStandardMaterial({ color: 0x6f9c63, roughness: 0.95 })
+    );
+    floor.position.y = -5;
+    scene.add(floor);
+
+    const player = {
+      p: new THREE.Vector3(0, 2.7, 12),
+      v: new THREE.Vector3(),
+      r: 0.45,
+      h: 1.8,
+      ground: false
+    };
+
+    let yaw = 0, pitch = 0;
+    let started = false;
+    let finished = false;
+    let towerIndex = 0;
+    let platforms = [];
+    let lasers = [];
+    let deadline = 0;
+
+    const $ = (id) => document.getElementById(id);
+    const moveInput = { x: 0, y: 0 };
+    const lookInput = { x: 0, y: 0 };
+
+    function block(w, h, d, x, y, z, color) {
+      const material = new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.78,
+        metalness: 0.12
+      });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+      mesh.position.set(x, y, z);
+      world.add(mesh);
+      return mesh;
+    }
+
+    function rainbowWall() {
+      const colors = [0xff1717, 0xff8500, 0xffee00, 0x16d84b, 0x1684ff, 0x5420b8, 0xa900d6];
+
+      for (let i = 0; i < 72; i++) {
+        const a1 = (i / 72) * Math.PI * 2;
+        const a2 = ((i + 1) / 72) * Math.PI * 2;
+
+        const x1 = Math.cos(a1) * WALL_RADIUS;
+        const z1 = Math.sin(a1) * WALL_RADIUS;
+        const x2 = Math.cos(a2) * WALL_RADIUS;
+        const z2 = Math.sin(a2) * WALL_RADIUS;
+
+        const pos = new Float32Array([
+          x1, 0, z1,
+          x2, 0, z2,
+          x2, WALL_HEIGHT, z2,
+          x1, WALL_HEIGHT, z1
+        ]);
+
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+        g.setIndex([0, 1, 2, 0, 2, 3]);
+        g.computeVertexNormals();
+
+        const m = new THREE.Mesh(
+          g,
+          new THREE.MeshStandardMaterial({
+            color: colors[i % colors.length],
+            emissive: colors[i % colors.length],
+            emissiveIntensity: 0.18,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.95
+          })
+        );
+
+        world.add(m);
+      }
+    }
+
+    function laser(x, y, z, length, rot = 0) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(length, 0.16, 0.16),
+        new THREE.MeshStandardMaterial({
+          color: 0xff1010,
+          emissive: 0xff0000,
+          emissiveIntensity: 1.5
+        })
+      );
+      mesh.position.set(x, y, z);
+      mesh.rotation.y = rot;
+      world.add(mesh);
+      lasers.push({ mesh, length, rot });
+    }
+
+    function clear() {
+      while (world.children.length) {
+        world.remove(world.children[0]);
+      }
+      lasers = [];
+    }
+
+    function makeTower(n) {
+      const arr = [];
+      const colors = [0x64cf83, 0x6ddac0, 0x829cff, 0x77e1ca, 0xa4b6ff];
+      const color = colors[n];
+
+      block(12, 1.2, 12, 0, 0.6, 12, color);
+      arr.push({ x: 0, y: 0.6, z: 12, w: 12, d: 12, top: 1.2 });
+
+      let count = 14;
+      let step = 4.1;
+      let thin = false;
+
+      if (n === 1) { count = 15; step = 4.1; }
+      if (n === 2) { count = 17; step = 3.8; }
+      if (n === 3) { count = 18; step = 3.6; thin = true; }
+      if (n === 4) { count = 19; step = 3.5; thin = true; }
+
+      for (let i = 0; i < count; i++) {
+        const y = 2 + i * step;
+        let x, z, w, d;
+
+        if (n === 0) {
+          x = Math.sin(i * 1.35) * (5 + (i % 3) * 1.5);
+          z = 11 - i * 0.65;
+          w = 5;
+          d = 4.2;
+        } else if (n === 1) {
+          const a = i / count * Math.PI * 2;
+          x = Math.cos(a) * (7 + (i % 3) * 1.7);
+          z = Math.sin(a) * (7 + (i % 3) * 1.7);
+          w = 4.5;
+          d = 4.5;
+        } else if (n === 2) {
+          x = (i % 2 === 0 ? 1 : -1) * (6 + (i % 3) * 1.6);
+          z = 11 - i * 0.7 + Math.sin(i * 1.4) * 1.8;
+          w = thin ? 2.4 : 4.8;
+          d = thin ? 2.4 : 4.2;
+        } else if (n === 3) {
+          x = Math.sin(i * 1.3) * (5 + (i % 3) * 1.7);
+          z = 11 - i * 0.8;
+          w = thin ? 2.8 : 5.4;
+          d = thin ? 2.8 : 4.1;
+        } else {
+          const dir = i % 2 === 0 ? 1 : -1;
+          x = dir * (6.5 + (i % 3) * 1.8);
+          z = 10 - i * 0.75 + Math.sin(i * 1.7) * 1.6;
+          w = 2.7;
+          d = 2.7;
+        }
+
+        const topY = y + 0.55;
+        block(w, 1.1, d, x, y, z, color + i * 6);
+        arr.push({ x, y, z, w, d, top: topY });
+
+        if (i % 2 === 1) {
+          laser(x, y + 1.25, z, Math.max(w + 1.1, 4.2), n === 1 ? Math.PI / 2 : 0);
+        }
+      }
+
+      const topY = 2 + count * step;
+      block(11, 1.3, 11, 0, topY, 0, 0xffca58);
+      arr.push({ x: 0, y: topY, z: 0, w: 11, d: 11, top: topY + 0.65 });
+
+      rainbowWall();
+      return arr;
+    }
+
+    function spawn(n) {
+      clear();
+      towerIndex = n;
+      platforms = makeTower(n);
+      const s = platforms[0];
+      player.p.set(s.x, s.top + player.h / 2 + 0.2, s.z);
+      player.v.set(0, 0, 0);
+      player.ground = true;
+      finished = false;
+      $("#tower").textContent = `${n + 1} / 5`;
+      deadline = performance.now() + 300000;
+      yaw = 0;
+      pitch = 0;
+    }
+
+    function respawn() {
+      const s = platforms[0];
+      player.p.set(s.x, s.top + player.h / 2 + 0.2, s.z);
+      player.v.set(0, 0, 0);
+      player.ground = true;
+      $("#status").textContent = "You fell or hit a laser!";
+    }
+
+    function physics(dt) {
+      const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+      const right = new THREE.Vector3(forward.z, 0, -forward.x);
+      const dir = new THREE.Vector3();
+      dir.addScaledVector(forward, moveInput.y);
+      dir.addScaledVector(right, moveInput.x);
+
+      if (dir.lengthSq() > 0) dir.normalize();
+
+      player.v.x = THREE.MathUtils.lerp(player.v.x, dir.x * 6.5, 0.18);
+      player.v.z = THREE.MathUtils.lerp(player.v.z, dir.z * 6.5, 0.18);
+
+      if (jumpPressed && player.ground) {
+        player.v.y = 9.8;
+        player.ground = false;
+        jumpPressed = false;
+      }
+
+      player.v.y -= 18 * dt;
+      player.p.addScaledVector(player.v, dt);
+    }
+
+    function collisions() {
+      let landed = false;
+
+      for (const q of platforms) {
+        if (Math.abs(player.p.x - q.x) <= q.w / 2 + player.r && Math.abs(player.p.z - q.z) <= q.d / 2 + player.r) {
+          const feet = player.p.y - player.h / 2;
+          if (player.v.y <= 0 && feet <= q.top + 0.45 && feet >= q.top - 1.8) {
+            player.p.y = q.top + player.h / 2;
+            player.v.y = 0;
+            landed = true;
+            break;
+          }
+        }
+      }
+
+      if (!landed && player.v.y <= 0 && player.p.y - player.h / 2 <= FLOOR_TOP && player.p.y - player.h / 2 >= FLOOR_TOP - 2) {
+        player.p.y = FLOOR_TOP + player.h / 2;
+        player.v.y = 0;
+        landed = true;
+      }
+
+      // Keep player inside rainbow wall boundary
+      const radial = Math.hypot(player.p.x, player.p.z);
+      const max = WALL_RADIUS - player.r;
+      if (radial > max) {
+        const scale = max / radial;
+        player.p.x *= scale;
+        player.p.z *= scale;
+      }
+
+      player.ground = landed;
+
+      if (player.p.y < -8) {
+        respawn();
+      }
+    }
+
+    function laserHits() {
+      for (const item of lasers) {
+        const pos = item.mesh.position;
+        const dx = player.p.x - pos.x;
+        const dy = player.p.y - pos.y;
+        const dz = player.p.z - pos.z;
+
+        const along = item.rot ? dz : dx;
+        const side = item.rot ? dx : dz;
+
+        if (Math.abs(along) < item.length / 2 + 0.7 && Math.abs(side) < 0.8 && Math.abs(dy) < 1.4) {
+          respawn();
+          return;
+        }
+      }
+    }
+
+    function finish() {
+      const q = platforms.at(-1);
+      if (!finished && Math.abs(player.p.x - q.x) < q.w / 2 + 0.4 && Math.abs(player.p.z - q.z) < q.d / 2 + 0.4 && player.p.y > q.top) {
+        finished = true;
+        $("#status").textContent = "Tower cleared!";
+        setTimeout(() => started && spawn((towerIndex + 1) % 5), 1200);
+      }
+    }
+
+    function timer() {
+      const seconds = Math.max(0, Math.ceil((deadline - performance.now()) / 1000));
+      $("#timer").textContent = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+      if (!seconds) spawn((towerIndex + 1) % 5);
+    }
+
+    function updateCamera() {
+      yaw -= lookInput.x * 0.06;
+      pitch -= lookInput.y * 0.06;
+      pitch = THREE.MathUtils.clamp(pitch, -1.45, 1.45);
+      camera.position.set(player.p.x, player.p.y + 1.2, player.p.z);
+      camera.rotation.set(pitch, yaw, 0);
+    }
+
+    function setupStick(el, thumb, input) {
+      let active = false;
+      let cx = 0, cy = 0;
+
+      const reset = () => {
+        active = false;
+        input.x = 0;
+        input.y = 0;
+        thumb.style.transform = "translate(-50%, -50%)";
+      };
+
+      el.addEventListener("pointerdown", (e) => {
+        if (!started) return;
+        active = true;
+        el.setPointerCapture(e.pointerId);
+        const rect = el.getBoundingClientRect();
+        cx = rect.left + rect.width / 2;
+        cy = rect.top + rect.height / 2;
+        update(e);
+      });
+
+      el.addEventListener("pointermove", (e) => {
+        if (active) update(e);
+      });
+
+      el.addEventListener("pointerup", reset);
+      el.addEventListener("pointercancel", reset);
+
+      function update(e) {
+        let dx = e.clientX - cx;
+        let dy = e.clientY - cy;
+        const dist = Math.hypot(dx, dy);
+        const max = 38;
+        if (dist > max) {
+          dx = (dx / dist) * max;
+          dy = (dy / dist) * max;
+        }
+        input.x = dx / max;
+        input.y = dy / max;
+        thumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      }
+    }
+
+    let jumpPressed = false;
+
+    setupStick($("#moveStick"), $("#moveThumb"), moveInput);
+    setupStick($("#lookStick"), $("#lookThumb"), lookInput);
+
+    $("#jump").addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      if (started) jumpPressed = true;
+    });
+
+    $("#start").addEventListener("click", () => {
+      started = true;
+      $("#overlay").classList.add("hide");
+      spawn(0);
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === " ") jumpPressed = true;
+      if (e.key.toLowerCase() === "w") moveInput.y = -1;
+      if (e.key.toLowerCase() === "s") moveInput.y = 1;
+      if (e.key.toLowerCase() === "a") moveInput.x = -1;
+      if (e.key.toLowerCase() === "d") moveInput.x = 1;
+    });
+
+    document.addEventListener("keyup", (e) => {
+      if (e.key === " ") jumpPressed = false;
+      if (e.key.toLowerCase() === "w" || e.key.toLowerCase() === "s") moveInput.y = 0;
+      if (e.key.toLowerCase() === "a" || e.key.toLowerCase() === "d") moveInput.x = 0;
+    });
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const dt = Math.min(clock.getDelta(), 0.033);
+
+      if (started) {
+        physics(dt);
+        collisions();
+        laserHits();
+        finish();
+        updateCamera();
+        timer();
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    camera.position.set(0, 5, 20);
+    $("#timer").textContent = "05:00";
+    renderer.render(scene, camera);
+    animate();
+  </script>
+</body>
+</html>
